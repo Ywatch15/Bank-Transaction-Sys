@@ -64,46 +64,62 @@ async function createTransaction(req, res) {
             message: `Insufficient funds. Current balance is ${balance}, and requested amount is ${amount}.`
         })
     }
+    let transaction;
+    try{
 
-
-    /**
-     * 5. Create transaction (PENDING)
-     * 6. Create DEBIT ledger entry
-     * 7. Create CREDIT ledger entry
-     * 8. Mark transaction as COMPLETED
-     * 9. Commit MongoDB session
-     */
-
-    const session = await mongoose.startSession();
-    session.startTransaction(); // this will ensure that all operations within this block are atomic i.e., either all of them succeed or none of them are applied
-    const transaction = await transactionModel.create({
-        fromAccount,
-        toAccount,
-        amount,
-        idempotencyKey,
-        status:"PENDING"
-    }, { session });
-
-    const debitLedgerEntry = await ledgerModel.create({
-        account: fromAccount,
-        amount,
-        transaction: transaction._id,
-        type:"DEBIT"
-    }, { session });
-
-    const creditLedgerEntry = await ledgerModel.create({
-        account: toAccount,
-        amount,
-        transaction: transaction._id,
-        type:"CREDIT"
-    }, { session });
-
+        /**
+         * 5. Create transaction (PENDING)
+         * 6. Create DEBIT ledger entry
+         * 7. Create CREDIT ledger entry
+         * 8. Mark transaction as COMPLETED
+         * 9. Commit MongoDB session
+         */
     
-    transaction.status = "COMPLETED";
-    await transaction.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
+        const session = await mongoose.startSession();
+        session.startTransaction(); // this will ensure that all operations within this block are atomic i.e., either all of them succeed or none of them are applied
+        transaction = (await transactionModel.create([{
+            fromAccount,
+            toAccount,
+            amount,
+            idempotencyKey,
+            status:"PENDING"
+        }], { session }))[0];
+    
+        const debitLedgerEntry = await ledgerModel.create([{
+            account: fromAccount,
+            amount,
+            transaction: transaction._id,
+            type:"DEBIT"
+        }], { session });
+    
+        await (()=>{
+            return new Promise((resolve)=> setTimeout(resolve,11*1000));
+        })()
+    
+        const creditLedgerEntry = await ledgerModel.create([{
+            account: toAccount,
+            amount,
+            transaction: transaction._id,
+            type:"CREDIT"
+        }], { session });
+    
+        
+        // transaction.status = "COMPLETED";
+        // await transaction.save({ session });
+        await transactionModel.findOneAndUpdate({_id: transaction._id}, {status:"COMPLETED"}, { session, new:true });
+    
+        await session.commitTransaction();
+        session.endSession();
+    } catch(error){
+        // await transactionModel.findOneAndUpdate(
+        //     {idempotencyKey: idempotencyKey},
+        //     {status:"FAILED"}
+        // )
+        return res.status(400).json({
+            message: "Transaction is pending due to some issues, please retry later.",
+            error: error.message
+        })
+    }
 
 
     /**
