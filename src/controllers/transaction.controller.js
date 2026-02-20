@@ -57,5 +57,5 @@ async function createTransaction(req, res) {
     /**
      * 4. Derive sender balance from ledger entries
      */
-    
+    const balance = await fromUserAccount.getBalance();
 }
