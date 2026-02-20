@@ -2,7 +2,7 @@ const transactionModel = require('../models/transaction.model');
 const ledgerModel = require('../models/ledger.model');
 const accountModel = require('../models/account.model');
 const emailService = require('../services/email.service');
-
+const mongoose = require('mongoose');
 
 async function createTransaction(req, res) {
     /**
@@ -58,4 +58,62 @@ async function createTransaction(req, res) {
      * 4. Derive sender balance from ledger entries
      */
     const balance = await fromUserAccount.getBalance();
+
+    if(balance<amount){
+        return res.status(400).json({
+            message: `Insufficient funds. Current balance is ${balance}, and requested amount is ${amount}.`
+        })
+    }
+
+
+    /**
+     * 5. Create transaction (PENDING)
+     * 6. Create DEBIT ledger entry
+     * 7. Create CREDIT ledger entry
+     * 8. Mark transaction as COMPLETED
+     * 9. Commit MongoDB session
+     */
+
+    const session = await mongoose.startSession();
+    session.startTransaction(); // this will ensure that all operations within this block are atomic i.e., either all of them succeed or none of them are applied
+    const transaction = await transactionModel.create({
+        fromAccount,
+        toAccount,
+        amount,
+        idempotencyKey,
+        status:"PENDING"
+    }, { session });
+
+    const debitLedgerEntry = await ledgerModel.create({
+        account: fromAccount,
+        amount,
+        transaction: transaction._id,
+        type:"DEBIT"
+    }, { session });
+
+    const creditLedgerEntry = await ledgerModel.create({
+        account: toAccount,
+        amount,
+        transaction: transaction._id,
+        type:"CREDIT"
+    }, { session });
+
+    
+    transaction.status = "COMPLETED";
+    await transaction.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+
+    /**
+     * 10. Send email notification
+     */
+
+    await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toAccount);
+    return res.status(201).json({ message: "Transaction completed successfully.", transaction });
+}
+
+module.exports={
+    createTransaction
 }
