@@ -1,28 +1,33 @@
 {
-  "name": "bank-transaction-system",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "bank-transaction-sys",
+  "version": "1.1.0",
+  "description": "Monorepo root for Bank Transaction System — backend (Node/Express) + frontend (React/Vite)",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npx nodemon server.js",
-    "start": "node server.js",
-    "seed": "node scripts/seedDemo.js"
+    "install:backend":  "cd backend  && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "install:all":      "npm run install:backend && npm run install:frontend",
+
+    "dev:backend":  "cd backend  && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "start \"backend\"  cmd /k \"cd backend  && npm run dev\" && start \"frontend\" cmd /k \"cd frontend && npm run dev\"",
+
+    "start":  "cd backend && npm run start",
+    "build":  "cd frontend && npm run build",
+    "seed":   "cd backend && npm run seed",
+
+    "lint:frontend": "cd frontend && npm run lint",
+    "format:frontend": "cd frontend && npm run format"
   },
-  "keywords": [],
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm":  ">=9.0.0"
+  },
+  "keywords": ["banking", "express", "react", "vite", "mongodb"],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "cookie-parser": "^1.4.7",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
-    "express-validator": "^7.3.1",
-    "fast-csv": "^5.0.5",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.2.1",
-    "nodemailer": "^8.0.1"
-  }
+  "license": "ISC"
 }
