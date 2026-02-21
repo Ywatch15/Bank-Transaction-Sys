@@ -2,6 +2,7 @@ const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const emailService = require("../services/email.service")
 const tokenBlackListModel = require("../models/blackList.model");
+const { validationResult } = require("express-validator");
 
 
 /**
@@ -9,6 +10,12 @@ const tokenBlackListModel = require("../models/blackList.model");
  * - POST /api/auth/register
  */
 async function userRegisterController(req,res){
+    // Check express-validator results from route-level validators
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({ success: false, errors: errors.array() });
+    }
+
     const {email,name,password} = req.body;
 
     const isExists = await userModel.findOne({
@@ -51,6 +58,12 @@ async function userRegisterController(req,res){
  * - POST /api/auth/login
  */
 async function userLoginController(req,res){
+    // Check express-validator results
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({ success: false, errors: errors.array() });
+    }
+
     const {email,password} = req.body;
     const user = await userModel.findOne({email}).select("+password");
 
