@@ -26,6 +26,31 @@ const userSchema = new mongoose.Schema({
         default: false,
         immutable: true,
         select: false
+    },
+
+    // ── Extended profile fields ──────────────────────────────
+    phoneNumber:{
+        type: String,
+        trim: true,
+        default: null,
+        match: [/^\+?[\d\s\-()]{7,20}$/, "Please provide a valid phone number."]
+    },
+    address:{
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: [300, "Address must be at most 300 characters."]
+    },
+    dateOfBirth:{
+        type: Date,
+        default: null
+    },
+
+    // ── Admin role ───────────────────────────────────────────
+    isAdmin:{
+        type: Boolean,
+        default: false,
+        select: false   // Never exposed unintentionally in API responses
     }
 },{
     timestamps:true
