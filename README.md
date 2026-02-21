@@ -289,8 +289,10 @@ Create a `.env` file in the project root:
 PORT=3000
 NODE_ENV=development
 
-# MongoDB
+# MongoDB (local)
 MONGO_URI=mongodb://localhost:27017/bank-transaction-system
+# MongoDB Atlas example (replace placeholders with your actual credentials):
+# MONGO_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@YOUR_CLUSTER_ID.mongodb.net/bank-transaction-system
 
 # JWT Secret (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 JWT_SECRET=REPLACE_WITH_STRONG_RANDOM_SECRET
