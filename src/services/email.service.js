@@ -1,41 +1,75 @@
 const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
+/**
+ * DISABLE_EMAILS=true  →  log the email to console only; do NOT send.
+ * Useful in development to avoid accidental sends.
+ */
+const DISABLE_EMAILS = process.env.DISABLE_EMAILS === "true";
+
+/**
+ * Build the nodemailer transporter from SMTP env vars.
+ * Falls back to the legacy OAuth2 config if SMTP_HOST is not set
+ * (backward-compatible with the original Gmail OAuth2 setup).
+ */
+const transporter = process.env.SMTP_HOST
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT ?? "587", 10),
+      secure: parseInt(process.env.SMTP_PORT ?? "587", 10) === 465, // true for port 465, false otherwise
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    })
+  : nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
         type: 'OAuth2',
         user: process.env.EMAIL_USER,
         clientId: process.env.CLIENT_ID,
         clientSecret: process.env.CLIENT_SECRET,
         refreshToken: process.env.REFRESH_TOKEN,
-    },
-});
+      },
+    });
 
-// Verify the connection configuration
-transporter.verify((error, success) => {
+// Verify connection only when emails are enabled.
+if (!DISABLE_EMAILS) {
+  transporter.verify((error) => {
     if (error) {
-        console.error('Error connecting to email server:', error);
+      console.error('[Email] Error connecting to email server:', error);
     } else {
-        console.log('Email server is ready to send messages');
+      console.log('[Email] Email server is ready to send messages.');
     }
-});
+  });
+}
 
-// Function to send email
+/**
+ * sendEmail(to, subject, text, html?)
+ * Core utility used by all notification helpers.
+ * Respects DISABLE_EMAILS — safe to call unconditionally.
+ */
 const sendEmail = async (to, subject, text, html) => {
-    try {
-        const info = await transporter.sendMail({
-        from: `"Backend Ledger" <${process.env.EMAIL_USER}>`, // sender address
-        to, // list of receivers
-        subject, // Subject line
-        text, // plain text body
-        html, // html body
-        });
+  if (DISABLE_EMAILS) {
+    console.log(`[Email] DISABLED — would have sent to: ${to} | subject: ${subject}`);
+    return;
+  }
 
-        console.log('Message sent: %s', info.messageId);
-        console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
-    } catch (error) {
-        console.error('Error sending email:', error);
-    }
+  try {
+    const fromAddress = process.env.EMAIL_FROM
+      || process.env.SMTP_USER
+      || process.env.EMAIL_USER;
+
+    const info = await transporter.sendMail({
+      from: `"Backend Ledger" <${fromAddress}>`,
+      to,
+      subject,
+      text,
+      html,
+    });
+    console.log('[Email] Message sent:', info.messageId);
+  } catch (error) {
+    console.error('[Email] Error sending email:', error.message);
+  }
 };
 
 async function sendRegistrationEmail(userEmail, name){
