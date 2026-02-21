@@ -1,19 +1,47 @@
 const express = require('express');
 const authMiddleware = require("../middleware/auth.middleware");
 const transactionController = require("../controllers/transaction.controller");
+const { transferRateLimiter } = require("../middleware/rateLimiter.middleware");
 
 const transactionRoutes = express.Router();
 
 /**
- * - POST /api/transactions/
- * - Create a new transaction between two accounts.
+ * GET /api/transactions/export
+ * Stream a CSV of filtered transactions.
+ * Must be declared BEFORE the catch-all GET "/" to avoid route collision.
  */
-transactionRoutes.post("/",authMiddleware.authMiddleware, transactionController.createTransaction);
+transactionRoutes.get(
+    "/export",
+    authMiddleware.authMiddleware,
+    transactionController.exportTransactionsCsv
+);
 
 /**
- * - POST /api/transactions/system/initial-funds
- * - Create initial funds transaction from system user
+ * GET /api/transactions/
+ * Paginated, filtered transaction history for the authenticated user.
+ * Params: startDate, endDate, type, minAmount, maxAmount, page, limit, sort
  */
-transactionRoutes.post("/system/initial-funds", authMiddleware.authSystemUserMiddleware, transactionController.createInitialFundsTransaction);
+transactionRoutes.get("/", authMiddleware.authMiddleware, transactionController.getTransactionHistory);
+
+/**
+ * POST /api/transactions/
+ * Create a new transaction between two accounts.
+ */
+transactionRoutes.post(
+    "/",
+    authMiddleware.authMiddleware,
+    transferRateLimiter,
+    transactionController.createTransaction
+);
+
+/**
+ * POST /api/transactions/system/initial-funds
+ * Create initial funds transaction from system user.
+ */
+transactionRoutes.post(
+    "/system/initial-funds",
+    authMiddleware.authSystemUserMiddleware,
+    transactionController.createInitialFundsTransaction
+);
 
 module.exports = transactionRoutes;

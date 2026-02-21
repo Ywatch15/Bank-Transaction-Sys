@@ -3,6 +3,7 @@ const ledgerModel = require('../models/ledger.model');
 const accountModel = require('../models/account.model');
 const emailService = require('../services/email.service');
 const mongoose = require('mongoose');
+const { format: csvFormat } = require('fast-csv');
 
 async function createTransaction(req, res) {
     /**
@@ -188,7 +189,173 @@ async function createInitialFundsTransaction(req, res) {
     return res.status(201).json({ message: "Initial funds transaction completed successfully.", transaction });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers shared by history and CSV export
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * buildTransactionQuery(req)
+ * Resolves the user's accounts and constructs a Mongoose filter object
+ * from the request query params.
+ *
+ * Supported params:
+ *   startDate  – ISO date string; filter createdAt >= startDate
+ *   endDate    – ISO date string; filter createdAt <= endDate
+ *   type       – "credit" | "debit" (relative to the requester); omit for all
+ *   minAmount  – numeric lower bound on amount
+ *   maxAmount  – numeric upper bound on amount
+ */
+async function buildTransactionQuery(req) {
+    const userId = req.user._id;
+
+    // Fetch all account IDs belonging to the authenticated user.
+    const userAccounts = await accountModel.find({ user: userId }).select("_id");
+    const accountIds = userAccounts.map((a) => a._id);
+
+    const { startDate, endDate, type, minAmount, maxAmount } = req.query;
+
+    // Base: only return transactions involving the user's accounts.
+    let accountFilter;
+    if (type === "credit") {
+        accountFilter = { toAccount: { $in: accountIds } };
+    } else if (type === "debit") {
+        accountFilter = { fromAccount: { $in: accountIds } };
+    } else {
+        // transfer / default → either side
+        accountFilter = {
+            $or: [{ fromAccount: { $in: accountIds } }, { toAccount: { $in: accountIds } }],
+        };
+    }
+
+    const filter = { ...accountFilter };
+
+    // Date range filtering
+    if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate);
+    }
+
+    // Amount range filtering
+    if (minAmount !== undefined || maxAmount !== undefined) {
+        filter.amount = {};
+        if (minAmount !== undefined) filter.amount.$gte = parseFloat(minAmount);
+        if (maxAmount !== undefined) filter.amount.$lte = parseFloat(maxAmount);
+    }
+
+    return filter;
+}
+
+/**
+ * parseSortParam(sortParam)
+ * Converts "field:asc" or "field:desc" string to a Mongoose sort object.
+ * Defaults to { createdAt: -1 } (newest first).
+ */
+function parseSortParam(sortParam) {
+    const ALLOWED_SORT_FIELDS = ["createdAt", "amount", "status", "updatedAt"];
+
+    if (!sortParam) return { createdAt: -1 };
+
+    const [field, direction] = sortParam.split(":");
+    if (!ALLOWED_SORT_FIELDS.includes(field)) return { createdAt: -1 };
+
+    return { [field]: direction === "asc" ? 1 : -1 };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/transactions
+ * Returns paginated, filtered transaction history for the authenticated user.
+ *
+ * Query params: startDate, endDate, type, minAmount, maxAmount, page, limit, sort
+ * Response: { data, page, limit, total }
+ */
+async function getTransactionHistory(req, res) {
+    try {
+        const page  = Math.max(1, parseInt(req.query.page  ?? "1",  10));
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit ?? "20", 10)));
+        const skip  = (page - 1) * limit;
+        const sort  = parseSortParam(req.query.sort);
+
+        const filter = await buildTransactionQuery(req);
+
+        const [data, total] = await Promise.all([
+            transactionModel
+                .find(filter)
+                .sort(sort)
+                .skip(skip)
+                .limit(limit)
+                .populate("fromAccount", "currency status")
+                .populate("toAccount", "currency status")
+                .lean(),
+            transactionModel.countDocuments(filter),
+        ]);
+
+        return res.status(200).json({ data, page, limit, total });
+    } catch (err) {
+        console.error("[Transaction] getTransactionHistory error:", err.message);
+        return res.status(500).json({ success: false, message: "Internal server error." });
+    }
+}
+
+/**
+ * GET /api/transactions/export
+ * Streams a CSV file of the filtered transactions.
+ * Pagination is optional; if page/limit are omitted, all matching records are exported.
+ *
+ * Query params: same as getTransactionHistory + optional page/limit
+ */
+async function exportTransactionsCsv(req, res) {
+    try {
+        const sort   = parseSortParam(req.query.sort);
+        const filter = await buildTransactionQuery(req);
+
+        // Pagination is optional for CSV export.
+        let query = transactionModel.find(filter).sort(sort).lean();
+
+        if (req.query.page !== undefined || req.query.limit !== undefined) {
+            const page  = Math.max(1, parseInt(req.query.page  ?? "1",  10));
+            const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit ?? "100", 10)));
+            query = query.skip((page - 1) * limit).limit(limit);
+        }
+
+        const transactions = await query;
+
+        // Set response headers for CSV download.
+        const filename = `transactions_${Date.now()}.csv`;
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+        const csvStream = csvFormat({ headers: true });
+        csvStream.pipe(res);
+
+        for (const txn of transactions) {
+            csvStream.write({
+                _id:            txn._id.toString(),
+                fromAccount:    txn.fromAccount?.toString() ?? "",
+                toAccount:      txn.toAccount?.toString() ?? "",
+                amount:         txn.amount,
+                status:         txn.status,
+                idempotencyKey: txn.idempotencyKey,
+                createdAt:      txn.createdAt?.toISOString() ?? "",
+                updatedAt:      txn.updatedAt?.toISOString() ?? "",
+            });
+        }
+
+        csvStream.end();
+    } catch (err) {
+        console.error("[Transaction] exportTransactionsCsv error:", err.message);
+        // Only write error response if headers have not been sent yet.
+        if (!res.headersSent) {
+            return res.status(500).json({ success: false, message: "Internal server error." });
+        }
+    }
+}
+
 module.exports={
     createTransaction,
-    createInitialFundsTransaction
+    createInitialFundsTransaction,
+    getTransactionHistory,
+    exportTransactionsCsv
 }
