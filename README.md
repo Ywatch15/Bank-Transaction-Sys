@@ -247,29 +247,35 @@ Create a `.env` file in the project root:
 ```env
 # Server
 PORT=3000
+NODE_ENV=development
 
 # MongoDB
 MONGO_URI=mongodb://localhost:27017/bank-transaction-system
-# OR use MongoDB Atlas:
-# MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/bank-transaction-system
 
-# JWT Secret (use a strong random string)
-JWT_SECRET=your_super_secret_jwt_key_here_min_32_chars
+# JWT Secret (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+JWT_SECRET=REPLACE_WITH_STRONG_RANDOM_SECRET
 
-# Email Service (using Gmail as example)
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASSWORD=your-app-specific-password
-EMAIL_FROM=noreply@banksystem.com
+# Email — set DISABLE_EMAILS=true in dev to suppress sends
+DISABLE_EMAILS=true
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=no-reply@example.com
+SMTP_PASS=REPLACE_WITH_APP_PASSWORD
+EMAIL_FROM=no-reply@example.com
 
-# Node Environment
-NODE_ENV=development
+# Rate Limiting (optional — these are the defaults)
+AUTH_RATE_LIMIT_WINDOW_MIN=15
+AUTH_RATE_LIMIT_MAX=20
+TRANSFER_RATE_LIMIT_WINDOW_MIN=15
+TRANSFER_RATE_LIMIT_MAX=30
 ```
+
+> Copy `.env.example` from the repo root for a full reference with all available variables.
 
 **Important Notes:**
 - `JWT_SECRET`: Generate a strong random string (min 32 characters)
-- `EMAIL_PASSWORD`: Use Gmail app-specific password (not your regular password)
+- `DISABLE_EMAILS=true`: Prevents any real emails from being sent (safe for development)
+- `SMTP_PASS`: Use an app-specific password, never your login password
 - Never commit `.env` to version control
 
 ---
@@ -400,6 +406,52 @@ Authorization: Bearer <JWT_TOKEN>
 
 ---
 
+### Profile Routes (`/api/profile`)
+
+#### Get Profile
+```http
+GET /api/profile
+Authorization: Bearer <JWT_TOKEN>
+```
+**Response:** `200 OK` — returns `name, email, phoneNumber, address, dateOfBirth`.
+
+#### Update Profile
+```http
+PATCH /api/profile
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+
+{
+  "name": "Jane Doe",
+  "phoneNumber": "+919876543210",
+  "address": "123 Main St, Mumbai",
+  "dateOfBirth": "1992-08-20"
+}
+```
+**Response:** `200 OK` — returns updated user (non-sensitive fields only).
+
+---
+
+### Admin Routes (`/api/admin`)
+
+> Requires an account with `isAdmin: true`. Contact a super-admin or run a one-off DB update to assign the flag.
+
+#### Freeze Account
+```http
+POST /api/admin/accounts/:accountId/freeze
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+**Response:** `200 OK` — account status set to `FROZEN`. Transfers from frozen accounts are blocked.
+
+#### Unfreeze Account
+```http
+POST /api/admin/accounts/:accountId/unfreeze
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+**Response:** `200 OK` — account status restored to `ACTIVE`.
+
+---
+
 ### Transaction Routes (`/api/transactions`)
 
 #### Create Transaction
@@ -430,6 +482,38 @@ Content-Type: application/json
   }
 }
 ```
+
+#### Get Transaction History
+```http
+GET /api/transactions
+Authorization: Bearer <JWT_TOKEN>
+```
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `startDate` | ISO date | Filter `createdAt >= startDate` |
+| `endDate` | ISO date | Filter `createdAt <= endDate` |
+| `type` | `credit`\|`debit` | Filter by direction relative to user (omit for all) |
+| `minAmount` | number | Lower bound on `amount` |
+| `maxAmount` | number | Upper bound on `amount` |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Records per page (default: 20, max: 100) |
+| `sort` | `field:asc\|desc` | e.g. `amount:desc` or `createdAt:asc` |
+
+**Response:** `200 OK`
+```json
+{ "data": [...], "page": 1, "limit": 20, "total": 45 }
+```
+
+#### Export Transactions as CSV
+```http
+GET /api/transactions/export?startDate=2026-01-01&type=debit
+Authorization: Bearer <JWT_TOKEN>
+```
+Supports the same query params as the history endpoint. Downloads a `.csv` file.
+If `page`/`limit` are omitted, exports **all** matching records (max 1000 per request).
+
+---
 
 #### Initial Funds Transaction (System)
 ```http
@@ -599,6 +683,35 @@ Content-Type: application/json
 # Currently no automated tests configured
 # Manual testing via Postman recommended
 ```
+
+### Seeding Demo Data
+
+The `scripts/seedDemo.js` script creates two demo users, their accounts, and an initial-funds transaction so you can explore the API without manual setup.
+
+**All seed email addresses are dummy values** (`demo+alice@example.com`, `demo+bob@example.com`) — no real emails are used.
+
+```bash
+# Make sure MONGO_URI is set in your .env file, then:
+npm run seed
+# or equivalently:
+node scripts/seedDemo.js
+```
+
+Expected output:
+```
+✔  Connected to MongoDB.
+  ✔  Created user: demo+alice@example.com
+  ✔  Created user: demo+bob@example.com
+  ✔  Seeded 100,000 INR initial funds into Alice's account.
+
+──── Seed Summary ──────────────────────────────────────
+  User:    demo+alice@example.com
+  Account: <accountId>
+  Password: DemoPass123!  (demo only — change immediately)
+...
+```
+
+> Re-running the seed removes and recreates demo data cleanly.
 
 ### Code Quality
 - Use consistent indentation (2 spaces)
