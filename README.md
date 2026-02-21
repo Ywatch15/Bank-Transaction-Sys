@@ -14,6 +14,11 @@ A robust, production-ready backend API for managing bank accounts and financial 
 - [Installation & Setup](#installation--setup)
 - [Environment Configuration](#environment-configuration)
 - [API Endpoints](#api-endpoints)
+  - [Authentication](#authentication-routes-apiauth)
+  - [Profile](#profile-routes-apiprofile)
+  - [Account](#account-routes-apiaccount)
+  - [Transactions](#transaction-routes-apitransactions)
+  - [Admin](#admin-routes-apiadmin)
 - [Database Schema](#database-schema)
 - [How It Works](#how-it-works)
 - [Key Components](#key-components)
@@ -26,10 +31,14 @@ A robust, production-ready backend API for managing bank accounts and financial 
 
 The **Bank Transaction System** is a Node.js/Express backend API designed to manage:
 - **User Authentication**: Secure registration, login, and logout with JWT tokens
+- **User Profiles**: Extended profile fields (phone, address, date of birth) with validated update endpoint
 - **Account Management**: Create and manage multiple accounts per user with different currencies
 - **Transactions**: Transfer funds between accounts with ledger-based balance tracking
-- **Security**: Token blacklisting, password hashing, middleware-based authorization
-- **Notifications**: Email alerts for transaction completions
+- **Transaction History**: Paginated, filterable history with CSV export
+- **Admin Controls**: Freeze/unfreeze accounts to block transfers
+- **Security**: Token blacklisting, password hashing, rate limiting, middleware-based authorization
+- **Audit Logging**: Every request is recorded to a dedicated `audit_logs` collection
+- **Notifications**: Email alerts for transaction completions (disabled safely in dev via env flag)
 
 This system uses a **double-entry ledger accounting model** to ensure financial accuracy and auditability of all transactions.
 
@@ -39,21 +48,30 @@ This system uses a **double-entry ledger accounting model** to ensure financial 
 
 ### Core Features
 - ✅ **User Registration & Authentication** - Secure JWT-based authentication with bcrypt password hashing
+- ✅ **User Profile Management** - Extended profile (phoneNumber, address, dateOfBirth) with validated PATCH endpoint
 - ✅ **Multi-Account Support** - Users can create and manage multiple accounts in different currencies
 - ✅ **Fund Transfers** - Transfer money between accounts with balance validation
+- ✅ **Transaction History** - Paginated, filterable history (date range, type, amount range, sorting)
+- ✅ **CSV Export** - Stream filtered transactions to a downloadable `.csv` file
 - ✅ **Ledger System** - Every transaction creates immutable DEBIT/CREDIT entries for audit trails
 - ✅ **Idempotency** - Duplicate requests with same idempotency key return cached responses
 - ✅ **Token Blacklisting** - Logout invalidates tokens permanently
-- ✅ **Email Notifications** - Transaction confirmations sent to user email
+- ✅ **Email Notifications** - Transaction confirmations sent via SMTP; suppressed in dev with `DISABLE_EMAILS=true`
 - ✅ **MongoDB Transactions** - ACID compliance with atomic operations
+- ✅ **Audit Logging** - Every request persisted to `audit_logs` collection (no secrets stored)
+- ✅ **Admin Controls** - Freeze / unfreeze accounts to block transfers instantly
+- ✅ **Input Validation** - `express-validator` on all write endpoints
 
 ### Security Features
 - 🔐 Password hashing with bcrypt
 - 🔐 JWT token-based authentication
 - 🔐 Token blacklist on logout
 - 🔐 Protected middleware for authorized routes
+- 🔐 Admin-only middleware (`authAdminMiddleware`) for privileged operations
+- 🔐 Rate limiting on auth routes (20 req / 15 min) and transfer route (30 req / 15 min), configurable via env
 - 🔐 Immutable ledger entries (cannot be modified/deleted)
 - 🔐 Account status validation (only ACTIVE accounts can transact)
+- 🔐 Audit log captures userId, IP, route, method — never passwords or raw tokens
 
 ---
 
@@ -67,7 +85,10 @@ This system uses a **double-entry ledger accounting model** to ensure financial 
 | **Mongoose** | ODM for MongoDB |
 | **JWT** | Token-based authentication |
 | **bcrypt** | Password hashing |
-| **Nodemailer** | Email service |
+| **Nodemailer** | Email service (SMTP) |
+| **express-validator** | Request body / query validation |
+| **express-rate-limit** | IP-based rate limiting |
+| **fast-csv** | CSV streaming / export |
 | **Dotenv** | Environment variable management |
 | **Cookie-Parser** | Cookie parsing middleware |
 
@@ -83,36 +104,47 @@ bank-transaction-system/
 ├── server.js                          # Application entry point
 ├── package.json                       # Dependencies & scripts
 ├── .env                               # Environment variables (git-ignored)
+├── .env.example                       # Safe placeholder reference for env vars
 ├── .gitignore                         # Git ignore rules
 │
+├── scripts/
+│   └── seedDemo.js                   # Demo data seeder (dummy emails only)
+│
 ├── src/
-│   ├── app.js                        # Express app setup & middleware
+│   ├── app.js                        # Express app setup, middleware & route wiring
 │   │
 │   ├── config/
 │   │   └── db.js                     # MongoDB connection config
 │   │
 │   ├── routes/
-│   │   ├── auth.routes.js            # Authentication endpoints
+│   │   ├── auth.routes.js            # Authentication endpoints (rate-limited + validated)
 │   │   ├── account.routes.js         # Account management endpoints
-│   │   └── transaction.routes.js     # Transaction endpoints
+│   │   ├── transaction.routes.js     # Transaction + history + CSV export endpoints
+│   │   ├── profile.routes.js         # User profile get/update endpoints
+│   │   └── admin.routes.js           # Admin freeze/unfreeze endpoints
 │   │
 │   ├── controllers/
 │   │   ├── auth.controller.js        # Auth logic (register, login, logout)
 │   │   ├── account.controller.js     # Account business logic
-│   │   └── transaction.controller.js # Transaction business logic
+│   │   ├── transaction.controller.js # Transfer, history, CSV export logic
+│   │   ├── profile.controller.js     # Profile get/update logic
+│   │   └── admin.controller.js       # Admin freeze/unfreeze logic
 │   │
 │   ├── middleware/
-│   │   └── auth.middleware.js        # JWT verification & authorization
+│   │   ├── auth.middleware.js        # JWT verification, authAdmin, authSystemUser
+│   │   ├── auditLog.middleware.js    # Request audit logging (non-blocking)
+│   │   └── rateLimiter.middleware.js # express-rate-limit config for auth & transfer
 │   │
 │   ├── models/
-│   │   ├── user.model.js             # User schema
-│   │   ├── account.model.js          # Account schema & methods
+│   │   ├── user.model.js             # User schema (incl. profile fields & isAdmin)
+│   │   ├── account.model.js          # Account schema & getBalance() method
 │   │   ├── transaction.model.js      # Transaction schema
-│   │   ├── ledger.model.js           # Ledger entry schema
-│   │   └── blackList.model.js        # Token blacklist schema
+│   │   ├── ledger.model.js           # Immutable ledger entry schema
+│   │   ├── blackList.model.js        # Token blacklist schema
+│   │   └── auditLog.model.js         # Audit log entry schema
 │   │
 │   └── services/
-│       └── email.service.js          # Email sending service
+│       └── email.service.js          # SMTP email service with DISABLE_EMAILS flag
 │
 └── README.md                          # This file
 ```
@@ -128,15 +160,23 @@ User Request
     ↓
 Express Server (port 3000)
     ↓
-Routes (auth/account/transaction)
+auditLogMiddleware  ← logs every request to audit_logs (non-blocking)
     ↓
-Middleware (auth verification)
+Rate Limiter (auth / transfer routes)
+    ↓
+Routes (auth / account / transaction / profile / admin)
+    ↓
+auth Middleware (JWT verification + blacklist check)
+    ↓
+express-validator (input validation on write routes)
     ↓
 Controller (business logic)
     ↓
 Models (database operations)
     ↓
 MongoDB (data persistence)
+    ↓
+Email Service (if DISABLE_EMAILS !== "true")
     ↓
 Response JSON
 ```
@@ -543,10 +583,14 @@ Content-Type: application/json
 ```javascript
 {
   _id: ObjectId,
-  name: String (required),
-  email: String (required, unique),
-  password: String (hashed, required),
-  phone: String (optional),
+  name: String (required, 2-100 chars),
+  email: String (required, unique, validated),
+  password: String (hashed with bcrypt, select: false),
+  phoneNumber: String (optional, E.164-compatible pattern),
+  address: String (optional, max 300 chars),
+  dateOfBirth: Date (optional, ISO 8601, must be in the past),
+  isAdmin: Boolean (default: false, select: false),
+  systemUser: Boolean (default: false, immutable, select: false),
   createdAt: Date,
   updatedAt: Date
 }
@@ -601,17 +645,49 @@ Content-Type: application/json
 }
 ```
 
+### AuditLog Schema
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId (ref: "user", nullable — null for unauthenticated requests),
+  ip: String,
+  method: String (GET, POST, PATCH, etc.),
+  route: String (e.g. /api/transactions/),
+  meta: Mixed (safe fields only: amount, accountId, currency — no passwords/tokens),
+  createdAt: Date   // updatedAt intentionally omitted
+}
+```
+
 ---
 
 ## 🔄 How It Works
 
 ### Authentication Flow
-1. User registers with email and password
-2. Password is hashed with bcrypt
-3. User logs in with credentials
-4. JWT token is issued and stored in cookies/header
-5. Protected routes verify token validity
-6. Logout blacklists the token
+1. User registers with email, name and password — validated by `express-validator`
+2. Password is hashed with bcrypt before save
+3. User logs in with credentials (also validated)
+4. JWT token is issued and returned in JSON body + cookie
+5. Protected routes verify token validity and blacklist status
+6. Logout blacklists the token permanently
+
+### Profile Update Flow
+1. User sends `PATCH /api/profile` with any subset of: `name`, `phoneNumber`, `address`, `dateOfBirth`
+2. `express-validator` checks format/length constraints (e.g. ISO date, date must be in the past)
+3. Only allow-listed fields are written; password and email cannot be changed here
+4. Returns updated user with non-sensitive fields only
+
+### Admin Freeze / Unfreeze Flow
+1. Admin sends `POST /api/admin/accounts/:accountId/freeze`
+2. `authAdminMiddleware` verifies JWT and checks `user.isAdmin === true`
+3. Account `status` is set to `FROZEN`
+4. All subsequent transfer attempts from/to that account are blocked by the existing status check in `createTransaction`
+5. Unfreeze restores status to `ACTIVE`
+
+### Audit Logging
+- `auditLogMiddleware` runs on **every request** after body parsing
+- Captures: `userId` (from `req.user` if set), `ip`, `method`, `route`, safe `meta` (amount / accountId)
+- Write failures are caught and logged to console — they **never interrupt** the request
+- Entries are stored in the `auditlogs` MongoDB collection
 
 ### Transaction Flow (Double-Entry Ledger)
 1. User initiates transfer from Account A to Account B
@@ -641,22 +717,34 @@ Content-Type: application/json
 
 ## 🧩 Key Components
 
-### Middleware (`src/middleware/auth.middleware.js`)
-- **authMiddleware**: Verifies JWT token, checks blacklist, attaches user to request
-- **authSystemUserMiddleware**: Extends authMiddleware for system-level operations
+### Middleware
+- **auth.middleware.js**
+  - `authMiddleware` — verifies JWT, checks blacklist, attaches `req.user`
+  - `authSystemUserMiddleware` — extends auth; requires `systemUser: true`
+  - `authAdminMiddleware` — extends auth; requires `isAdmin: true` (admin-only routes)
+- **auditLog.middleware.js** — writes a safe audit entry for every request; failures are non-fatal
+- **rateLimiter.middleware.js**
+  - `authRateLimiter` — applied to all `/api/auth/*` routes (default: 20 req / 15 min per IP)
+  - `transferRateLimiter` — applied to `POST /api/transactions/` (default: 30 req / 15 min per IP)
+  - All limits are read from env vars — see [Environment Configuration](#environment-configuration)
 
 ### Controllers
-- **auth.controller.js**: Handles user registration, login, logout
-- **account.controller.js**: Manages account creation and retrieval
-- **transaction.controller.js**: Processes fund transfers and ledger creation
+- **auth.controller.js** — registration (with validation result check), login, logout
+- **account.controller.js** — account creation, listing, balance retrieval
+- **transaction.controller.js** — fund transfer, initial funds, history, CSV export
+- **profile.controller.js** — get profile, validated profile update
+- **admin.controller.js** — freeze account, unfreeze account
 
 ### Models
-- **Models**: Contain database schemas and custom methods
-- **account.model.js**: Includes `getBalance()` aggregation method
-- **ledger.model.js**: Prevents modification/deletion of entries
+- **user.model.js** — user schema with profile fields (`phoneNumber`, `address`, `dateOfBirth`) and `isAdmin` flag
+- **account.model.js** — includes `getBalance()` aggregation method
+- **ledger.model.js** — immutable entries; pre-hooks block all update/delete operations
+- **auditLog.model.js** — stores per-request audit entries in `auditlogs` collection
+- **transaction.model.js** — transaction lifecycle schema
+- **blackList.model.js** — invalidated JWT store
 
 ### Services
-- **email.service.js**: Sends transaction confirmation emails via Nodemailer
+- **email.service.js** — SMTP-based email using env vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`); setting `DISABLE_EMAILS=true` skips actual sends and logs to console instead
 
 ---
 
@@ -666,13 +754,17 @@ Content-Type: application/json
 
 | Error | Status | Cause | Solution |
 |-------|--------|-------|----------|
+| Validation errors | 422 | Invalid / missing fields (express-validator) | Check `errors` array in response |
 | Missing required fields | 400 | Incomplete request body | Provide all required fields |
 | Insufficient funds | 400 | Balance < amount | Add funds to account first |
 | Account not found | 404 | Invalid account ID | Verify account ID |
 | Unauthorized | 401 | Invalid/expired token | Login again to get new token |
 | Token blacklisted | 401 | Token invalidated via logout | Cannot reuse, login again |
 | Account not active | 400 | Account frozen/closed | Activate account first |
+| Account already frozen | 400 | Freeze called on already-frozen account | Check account status first |
 | Duplicate idempotency key | 400 | Same key used twice | Use unique idempotency key |
+| Forbidden (admin) | 403 | `isAdmin` not set on user | Grant admin flag via DB |
+| Too many requests | 429 | Rate limit exceeded | Wait for window to reset (see `RateLimit-Reset` header) |
 
 ---
 
@@ -808,7 +900,22 @@ curl -X POST http://localhost:3000/api/transactions/ \
 curl -X GET http://localhost:3000/api/account/balance/<ACCOUNT_ID> \
   -H "Authorization: Bearer <TOKEN>"
 
-# 8. Logout
+# 8. View transaction history with filters
+curl -X GET "http://localhost:3000/api/transactions?type=debit&startDate=2026-01-01&page=1&limit=10" \
+  -H "Authorization: Bearer <TOKEN>"
+
+# 9. Export transactions as CSV
+curl -X GET "http://localhost:3000/api/transactions/export?type=credit" \
+  -H "Authorization: Bearer <TOKEN>" \
+  --output transactions.csv
+
+# 10. Update profile
+curl -X PATCH http://localhost:3000/api/profile \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"phoneNumber": "+919876543210", "address": "Mumbai", "dateOfBirth": "1992-08-20"}'
+
+# 11. Logout
 curl -X POST http://localhost:3000/api/auth/logout \
   -H "Authorization: Bearer <TOKEN>"
 ```
@@ -828,9 +935,20 @@ curl -X POST http://localhost:3000/api/auth/logout \
 - Trace balance calculation by adding logs to `account.model.js` `getBalance()` method
 
 ### Email not sending
-- Verify SMTP credentials in `.env`
-- For Gmail: use app-specific password, not regular password
-- Check email service logs in console output
+- If `DISABLE_EMAILS=true` in `.env`, emails are intentionally suppressed — check console logs instead
+- Verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` are set correctly in `.env`
+- For Gmail: use an app-specific password (not your account password); enable 2FA first
+- Check `[Email]` prefixed lines in server console output
+
+### Rate limit hit unexpectedly
+- Default limits: auth routes 20 req / 15 min, transfer 30 req / 15 min
+- Adjust `AUTH_RATE_LIMIT_MAX` / `TRANSFER_RATE_LIMIT_MAX` in `.env` for development
+- The `RateLimit-Reset` response header tells you when the window resets
+
+### Audit log entries not appearing
+- Confirm MongoDB is reachable — the middleware writes to the same connection
+- Collection is named `auditlogs` (check with `db.auditlogs.find().pretty()`)
+- Failures are non-fatal; check console for `[AuditLog] Failed to write` messages
 
 ### MongoDB connection timeout
 - Ensure MongoDB is running locally or Atlas cluster is accessible
@@ -854,5 +972,5 @@ ISC License - See package.json for details
 ---
 
 **Last Updated:** February 21, 2026  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Author:** Ywatch15
