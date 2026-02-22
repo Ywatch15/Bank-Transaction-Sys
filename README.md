@@ -1,6 +1,6 @@
 # Bank Transaction System
 
-A robust, production-ready backend API for managing bank accounts and financial transactions with secure authentication, transaction ledger tracking, and email notifications.
+A robust, production-ready **full-stack** banking application: a Node.js/Express REST API backend paired with a React + Vite + Tailwind frontend — featuring secure authentication, real-time transaction management, CSV export, admin controls, and a 3D parallax hero.
 
 ---
 
@@ -99,54 +99,97 @@ This system uses a **double-entry ledger accounting model** to ensure financial 
 
 ## 📁 Project Structure
 
+This project uses a **monorepo layout** — backend and frontend each live in their own subdirectory.
+
 ```
-bank-transaction-system/
-├── server.js                          # Application entry point
-├── package.json                       # Dependencies & scripts
-├── .env                               # Environment variables (git-ignored)
-├── .env.example                       # Safe placeholder reference for env vars
-├── .gitignore                         # Git ignore rules
+bank-transaction-system/               ← repo root
+├── package.json                       # Monorepo root: install:all, dev, build scripts
+├── .gitignore                         # Shared git ignore rules
+├── README.md                          # This file
 │
-├── scripts/
-│   └── seedDemo.js                   # Demo data seeder (dummy emails only)
+├── backend/                           # Node.js / Express API
+│   ├── server.js                      # Application entry point  (node backend/server.js)
+│   ├── package.json                   # Backend dependencies & scripts
+│   ├── package-lock.json
+│   ├── .env                           # Environment variables (git-ignored)
+│   ├── .env.example                   # Safe placeholder reference
+│   │
+│   ├── scripts/
+│   │   └── seedDemo.js               # Demo data seeder
+│   │
+│   └── src/
+│       ├── app.js                     # Express app setup, middleware & route wiring
+│       ├── config/
+│       │   └── db.js                  # MongoDB connection config
+│       ├── routes/
+│       │   ├── auth.routes.js         # POST /api/auth/login|register|logout
+│       │   ├── account.routes.js      # GET|POST /api/account
+│       │   ├── transaction.routes.js  # POST /api/transactions + history + CSV export
+│       │   ├── profile.routes.js      # GET|PATCH /api/profile
+│       │   └── admin.routes.js        # PATCH /api/admin/accounts/:id/freeze|unfreeze
+│       ├── controllers/
+│       │   ├── auth.controller.js
+│       │   ├── account.controller.js
+│       │   ├── transaction.controller.js
+│       │   ├── profile.controller.js
+│       │   └── admin.controller.js
+│       ├── middleware/
+│       │   ├── auth.middleware.js        # JWT verify, authAdmin
+│       │   ├── auditLog.middleware.js    # Non-blocking request logger
+│       │   └── rateLimiter.middleware.js # express-rate-limit (auth + transfer)
+│       ├── models/
+│       │   ├── user.model.js
+│       │   ├── account.model.js
+│       │   ├── transaction.model.js
+│       │   ├── ledger.model.js
+│       │   ├── blackList.model.js
+│       │   └── auditLog.model.js
+│       └── services/
+│           └── email.service.js          # SMTP email with DISABLE_EMAILS flag
 │
-├── src/
-│   ├── app.js                        # Express app setup, middleware & route wiring
-│   │
-│   ├── config/
-│   │   └── db.js                     # MongoDB connection config
-│   │
-│   ├── routes/
-│   │   ├── auth.routes.js            # Authentication endpoints (rate-limited + validated)
-│   │   ├── account.routes.js         # Account management endpoints
-│   │   ├── transaction.routes.js     # Transaction + history + CSV export endpoints
-│   │   ├── profile.routes.js         # User profile get/update endpoints
-│   │   └── admin.routes.js           # Admin freeze/unfreeze endpoints
-│   │
-│   ├── controllers/
-│   │   ├── auth.controller.js        # Auth logic (register, login, logout)
-│   │   ├── account.controller.js     # Account business logic
-│   │   ├── transaction.controller.js # Transfer, history, CSV export logic
-│   │   ├── profile.controller.js     # Profile get/update logic
-│   │   └── admin.controller.js       # Admin freeze/unfreeze logic
-│   │
-│   ├── middleware/
-│   │   ├── auth.middleware.js        # JWT verification, authAdmin, authSystemUser
-│   │   ├── auditLog.middleware.js    # Request audit logging (non-blocking)
-│   │   └── rateLimiter.middleware.js # express-rate-limit config for auth & transfer
-│   │
-│   ├── models/
-│   │   ├── user.model.js             # User schema (incl. profile fields & isAdmin)
-│   │   ├── account.model.js          # Account schema & getBalance() method
-│   │   ├── transaction.model.js      # Transaction schema
-│   │   ├── ledger.model.js           # Immutable ledger entry schema
-│   │   ├── blackList.model.js        # Token blacklist schema
-│   │   └── auditLog.model.js         # Audit log entry schema
-│   │
-│   └── services/
-│       └── email.service.js          # SMTP email service with DISABLE_EMAILS flag
-│
-└── README.md                          # This file
+└── frontend/                          # React 18 + Vite 5 SPA
+    ├── package.json
+    ├── vite.config.js                 # Dev proxy: /api/* → backend :3000
+    ├── tailwind.config.js
+    ├── postcss.config.js
+    ├── index.html
+    ├── .env.example
+    └── src/
+        ├── main.jsx                   # React root (BrowserRouter → providers → App)
+        ├── App.jsx                    # Route definitions (lazy-loaded pages)
+        ├── index.css                  # Tailwind + component shortcuts
+        ├── context/
+        │   ├── AuthContext.jsx        # useAuth() — login, logout, refreshUser
+        │   └── ToastContext.jsx       # useToast() — showToast, removeToast
+        ├── lib/
+        │   ├── api.js                 # Axios instance + API_ROUTES constants
+        │   ├── auth.js                # JWT helpers: setToken, getToken, isAdmin
+        │   └── download.js            # downloadBlob, csvFilename utilities
+        ├── components/
+        │   ├── ProtectedRoute.jsx     # Redirects to /login if unauthenticated
+        │   ├── AdminRoute.jsx         # Redirects to /unauthorized if not admin
+        │   ├── Header.jsx             # Top nav bar with mobile hamburger
+        │   ├── MobileNav.jsx          # Slide-in side drawer (framer-motion)
+        │   ├── Toast.jsx              # Fixed notification stack
+        │   ├── AccountCard.jsx        # Account info + Transfer / Details buttons
+        │   ├── TransactionList.jsx    # Colour-coded transaction rows
+        │   ├── TransferForm.jsx       # Controlled fund transfer form
+        │   ├── FilterBar.jsx          # Date/type/amount/sort filter controls
+        │   ├── ThreeDParallaxHero.jsx # react-three-fiber hero (lazy, reduced-motion safe)
+        │   └── Scene3DInner.jsx       # Actual Three.js canvas (code-split)
+        └── pages/
+            ├── Auth/
+            │   ├── Login.jsx
+            │   └── Register.jsx
+            ├── Accounts/
+            │   └── AccountDetail.jsx
+            ├── Admin/
+            │   └── AdminDashboard.jsx
+            ├── Dashboard.jsx
+            ├── Transactions.jsx
+            ├── Profile.jsx
+            ├── NotFound.jsx           # 404
+            └── Unauthorized.jsx       # 403
 ```
 
 ---
@@ -233,56 +276,86 @@ Returns: balance (positive = surplus, negative = overdraft)
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-- Node.js (v14+)
+- Node.js v18+
 - MongoDB (local or Atlas)
-- npm or yarn
+- npm v9+
 
-### Step 1: Clone Repository
+### Step 1: Clone the repository
 ```bash
 git clone <repository-url>
 cd bank-transaction-system
 ```
 
-### Step 2: Install Dependencies
+### Step 2: Install dependencies
+
+**Option A — install both at once from the repo root:**
 ```bash
-npm install
+npm run install:all
 ```
 
-### Step 3: Create `.env` File
+**Option B — install individually:**
 ```bash
-touch .env
+cd backend  && npm install
+cd ../frontend && npm install
 ```
 
-### Step 4: Configure Environment Variables
-See [Environment Configuration](#environment-configuration) below.
+### Step 3: Configure backend environment
+```bash
+cp backend/.env.example backend/.env
+# Then edit backend/.env with your MongoDB URI, JWT secret, SMTP details, etc.
+```
+
+### Step 4: Configure frontend environment (optional)
+```bash
+cp frontend/.env.example frontend/.env.local
+# Set VITE_API_BASE_URL if not using the built-in Vite proxy
+# Set VITE_ALLOW_DEMO=true to enable the demo login button
+```
 
 ### Step 5: Start MongoDB
 ```bash
-# If using local MongoDB
+# Local MongoDB:
 mongod
 
-# OR use MongoDB Atlas (connection string in .env)
+# OR use a MongoDB Atlas connection string in backend/.env
 ```
 
-### Step 6: Run the Application
+### Step 6: Run the application
 
-**Development Mode** (with auto-reload):
+**Run backend only (API server on :3000):**
+```bash
+cd backend && npm run dev
+```
+
+**Run frontend only (Vite dev server on :5173, proxies /api/* → :3000):**
+```bash
+cd frontend && npm run dev
+```
+
+**Run both simultaneously from repo root (Windows):**
 ```bash
 npm run dev
 ```
 
-**Production Mode**:
+**Production build:**
 ```bash
-npm start
+npm run build          # builds frontend/dist/
+npm run start          # starts backend in production mode
 ```
 
-Server will start on `http://localhost:3000`
+**Seed demo data:**
+```bash
+npm run seed           # creates demo+alice@example.com and demo+bob@example.com
+```
+
+Backend API: `http://localhost:3000`  
+Frontend app: `http://localhost:5173`
 
 ---
 
 ## 🔧 Environment Configuration
 
-Create a `.env` file in the project root:
+Create `backend/.env` (copy from `backend/.env.example`):
 
 ```env
 # Server
