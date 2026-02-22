@@ -20,15 +20,29 @@ export function AuthProvider({ children }) {
 
   // On mount: restore session from stored token
   useEffect(() => {
+    let cancelled = false;
+    
     const token = getToken();
     if (token) {
       const decoded = decodeToken(token);
       if (decoded) {
         // Fetch fresh user profile
         fetchProfileAPI()
-          .then(({ data }) => setUser(data.user || data))
-          .catch(() => clearToken())
-          .finally(() => setLoading(false));
+          .then(({ data }) => {
+            if (!cancelled) {
+              setUser(data.user || data);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              clearToken();
+            }
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setLoading(false);
+            }
+          });
       } else {
         clearToken();
         setLoading(false);
@@ -36,6 +50,11 @@ export function AuthProvider({ children }) {
     } else {
       setLoading(false);
     }
+    
+    // Cleanup: mark as cancelled if component unmounts before promise resolves
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback((userData, token) => {
