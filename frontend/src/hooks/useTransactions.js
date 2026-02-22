@@ -42,9 +42,13 @@ export function useTransactions(initialFilters = {}) {
     }
   }, [pagination.limit, showToast]);
 
-  // Load first page on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const initialFetch = useCallback(() => fetch(initialFilters, 1), []);
+  // Load first page on mount with initial filters
+  // Intentionally not including `fetch` in deps to prevent infinite loops
+  // initialFilters should be stable across renders
+  const initialFetch = useCallback(
+    () => fetch(initialFilters, 1),
+    [fetch, initialFilters]
+  );
 
   return {
     transactions,

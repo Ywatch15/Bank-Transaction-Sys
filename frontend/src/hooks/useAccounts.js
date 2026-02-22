@@ -26,10 +26,12 @@ export function useAccounts() {
     }
   }, [showToast]);
 
-  // Fetch on mount
+  // Fetch on mount only
+  // Note: intentionally not including fetchAccounts in deps to avoid infinite loop
+  // since fetchAccounts is recreated whenever showToast changes
   useEffect(() => {
     fetchAccounts();
-  }, [fetchAccounts]);
+  }, []); // Empty deps: fetch once on mount
 
   return { accounts, loading, error, refetch: fetchAccounts };
 }
