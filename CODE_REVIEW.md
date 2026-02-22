@@ -651,7 +651,123 @@ return res.status(201).json({...});
 
 ---
 
-## 📝 NEXT STEPS
+## � ADDITIONAL CRITICAL ISSUES (From Re-Review)
+
+### 8. **createInitialFundsTransaction Missing Session Error Handling**
+**File:** `backend/src/controllers/transaction.controller.js:193-224`  
+**Severity:** 🔴 CRITICAL - Connection Pool Exhaustion
+
+**Issue:**
+```javascript
+const session = await mongoose.startSession();
+session.startTransaction();
+// ❌ NO try/catch block
+await transaction.save({ session });
+await session.commitTransaction();
+session.endSession();  // Only on success path!
+```
+
+**Impact:**
+- If `transaction.save()` throws error, `session.endSession()` never called
+- Session connection leaks to MongoDB connection pool
+- After ~10 errors, system becomes unavailable (default pool size = 10)
+
+**Fix:** Wrap in try/catch/finally like `createTransaction()`
+
+---
+
+### 9. **Race Condition: Balance Check Outside Session**
+**File:** `backend/src/controllers/transaction.controller.js:66-77`  
+**Severity:** 🔴 CRITICAL - Double-Spend Vulnerability
+
+**Issue:**
+```javascript
+// ❌ Balance checked OUTSIDE session
+const balance = await fromUserAccount.getBalance();  // Line 66
+
+if(balance < amount) { return error; }
+
+// [RACE CONDITION GAP] Another request can pass same check here
+
+const session = await mongoose.startSession();  // Line 77 - session starts NOW
+```
+
+**Vulnerability:**
+```
+Request A: Balance = $500, passes check ✓
+Request B: Balance = $500, passes check ✓
+Request A: Debits $500, balance now $0
+Request B: Debits $500, balance now -$500 ✗ (overdraft!)
+```
+
+**Fix:** Fetch balance INSIDE session with pessimistic locking
+
+---
+
+### 10. **Race Condition: Account Status Outside Session**
+**File:** `backend/src/controllers/transaction.controller.js:62-77`  
+**Severity:** 🔴 CRITICAL - Frozen Account Transfer
+
+**Issue:**
+```javascript
+// ❌ Status checked OUTSIDE session
+if(fromUserAccount.status !== "ACTIVE") { return error; }
+
+// [RACE CONDITION GAP] Admin can freeze account here
+
+const session = await mongoose.startSession();  // Session starts AFTER
+```
+
+**Vulnerability:**
+```
+Request A: Check status = ACTIVE ✓
+Admin concurrent: Freeze Account
+Request A: Transfer from frozen account ✗
+```
+
+**Fix:** Check status inside session
+
+---
+
+### 11. **Email Notification Failure Silent**
+**File:** `backend/src/controllers/transaction.controller.js:162-164`  
+**Severity:** 🔴 CRITICAL - Notification Delivery Not Guaranteed
+
+**Issue:**
+```javascript
+// ❌ No error handling
+await emailService.sendTransactionEmail(...);
+return res.status(201).json({ message: "Transaction completed successfully." });
+// If email fails, user never knows
+```
+
+**Fix:** Add try/catch and log failures for retry queue
+
+---
+
+### 12. **idempotencyKey Not Validated at Intake**
+**File:** `backend/src/controllers/transaction.controller.js:13-14`  
+**Severity:** 🔴 CRITICAL - Weak Idempotency
+
+**Issue:**
+```javascript
+const{ fromAccount, toAccount, amount, idempotencyKey } = req.body;
+
+if(!idempotencyKey) { return error; }
+// ❌ Accepts empty strings, whitespace, single characters
+```
+
+**Problem:**
+- `idempotencyKey: " "` (whitespace) → passes check
+- `idempotencyKey: "a"` (single char) → passes check
+- No UUID format validation
+- Keys could collide across different transactions
+
+**Fix:** Validate format and minimum length (UUID or 8+ chars)
+
+---
+
+## �📝 NEXT STEPS
 
 1. **Create GitHub issues** for each CRITICAL/HIGH priority item
 2. **Implement fixes** in feature branch with test cases

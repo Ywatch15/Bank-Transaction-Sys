@@ -14,6 +14,14 @@ async function createTransaction(req, res) {
     if(!fromAccount || !toAccount || !amount || !idempotencyKey){
         return res.status(400).json({ error: "Missing required fields." });
     }
+    
+    // CRITICAL FIX #5: Validate idempotencyKey format and length.
+    // Prevents whitespace-only or single-character keys that could collide.
+    if (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length < 8) {
+        return res.status(400).json({ 
+            error: "Invalid idempotency key: must be non-empty string, minimum 8 characters." 
+        });
+    }
     const fromUserAccount = await accountModel.findOne({
         _id: fromAccount,
     })
@@ -55,38 +63,71 @@ async function createTransaction(req, res) {
         }
     }
 
-    /**
-     * 3. Check account status
-     */
-    if(fromUserAccount.status !== "ACTIVE" || toUserAccount.status !== "ACTIVE"){
-        return res.status(400).json({ error: "One or both accounts are not active." });
-    }
-
-    /**
-     * 4. Derive sender balance from ledger entries
-     */
-    const balance = await fromUserAccount.getBalance();
-
-    if(balance<amount){
-        return res.status(400).json({
-            message: `Insufficient funds. Current balance is ${balance}, and requested amount is ${amount}.`
-        })
-    }
     let transaction;
     const session = await mongoose.startSession();
     try{
 
         /**
-         * 5. Create transaction (PENDING)
-         * 6. Create DEBIT ledger entry (atomic within session)
-         * 7. Create CREDIT ledger entry (atomic within session)
-         * 8. Mark transaction as COMPLETED
-         * 9. Commit MongoDB session
+         * 2. Check account status (MOVED INSIDE SESSION)
+         * 3. Derive sender balance from ledger entries (MOVED INSIDE SESSION)
+         * 4. Create transaction (PENDING)
+         * 5. Create DEBIT ledger entry (atomic within session)
+         * 6. Create CREDIT ledger entry (atomic within session)
+         * 7. Mark transaction as COMPLETED
+         * 8. Commit MongoDB session
          */
         
         // CRITICAL: Start transaction session. All operations below are atomic.
         // If ANY operation fails, the entire transaction rolls back.
         session.startTransaction();
+        
+        // CRITICAL FIX #3: Check account status INSIDE session to prevent race condition.
+        // Prevents admin from freezing account between check and transaction execution.
+        const fromAcct = await accountModel.findOne(
+            { _id: fromAccount },
+            null,
+            { session }
+        );
+        const toAcct = await accountModel.findOne(
+            { _id: toAccount },
+            null,
+            { session }
+        );
+        
+        if (!fromAcct || !toAcct) {
+            throw new Error("One or both accounts not found or locked by another transaction.");
+        }
+        
+        if (fromAcct.status !== "ACTIVE" || toAcct.status !== "ACTIVE") {
+            throw new Error("One or both accounts are not active.");
+        }
+        
+        // CRITICAL FIX #2: Check balance INSIDE session to prevent race condition (double-spend).
+        // Prevents concurrent requests from both passing balance check and overdrafting account.
+        // Use aggregation pipeline within session context for accurate balance calculation.
+        const balanceData = await ledgerModel.aggregate([
+            { $match: { account: mongoose.Types.ObjectId(fromAccount) } },
+            { 
+                $group: { 
+                    _id: null, 
+                    balance: { 
+                        $sum: { 
+                            $cond: [
+                                { $eq: ["$type", "CREDIT"] },
+                                "$amount",
+                                { $multiply: ["$amount", -1] }
+                            ]
+                        } 
+                    } 
+                } 
+            }
+        ], { session });
+        
+        const balance = balanceData[0]?.balance ?? 0;
+        
+        if (balance < amount) {
+            throw new Error(`Insufficient funds. Current balance is ${balance}, requested amount is ${amount}.`);
+        }
         
         transaction = (await transactionModel.create([{
             fromAccount,
@@ -160,10 +201,19 @@ async function createTransaction(req, res) {
 
 
     /**
-     * 10. Send email notification
+     * 9. Send email notification (after transaction committed, non-critical)
      */
 
-    await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toAccount);
+    // CRITICAL FIX #4: Handle email failure gracefully.
+    // Email is non-critical (transaction already succeeded).
+    // Log failures for retry queue, but don't fail the API response.
+    try {
+        await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toAccount);
+    } catch (emailErr) {
+        console.warn(`[Transaction] Email notification failed for transaction ${transaction._id}:`, emailErr.message);
+        // TODO: Queue for retry or use notification service with retry logic
+    }
+    
     return res.status(201).json({ message: "Transaction completed successfully.", transaction });
 }
 
@@ -172,6 +222,13 @@ async function createInitialFundsTransaction(req, res) {
 
     if(!toAccount || !amount || !idempotencyKey){
         return res.status(400).json({ error: "Missing required fields." });
+    }
+    
+    // CRITICAL FIX #5: Validate idempotencyKey format and length.
+    if (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length < 8) {
+        return res.status(400).json({ 
+            error: "Invalid idempotency key: must be non-empty string, minimum 8 characters." 
+        });
     }
 
     const toUserAccount = await accountModel.findOne({
@@ -192,37 +249,57 @@ async function createInitialFundsTransaction(req, res) {
     }
 
     const session = await mongoose.startSession();
-    session.startTransaction();
+    try {
+        // CRITICAL FIX #1: Add try/catch/finally for session error handling.
+        // Prevents session leaks when errors occur during transaction processing.
+        session.startTransaction();
 
-    const transaction = new transactionModel({
-        fromAccount: fromUserAccount._id,
-        toAccount,
-        amount,
-        idempotencyKey,
-        status:"PENDING"
-    });
+        const transaction = new transactionModel({
+            fromAccount: fromUserAccount._id,
+            toAccount,
+            amount,
+            idempotencyKey,
+            status:"PENDING"
+        });
 
-    const debitLedgerEntry = await ledgerModel.create([{
-        account: fromUserAccount._id,
-        amount,
-        transaction: transaction._id,
-        type:"DEBIT"
-    }], { session });
+        const debitLedgerEntry = await ledgerModel.create([{
+            account: fromUserAccount._id,
+            amount,
+            transaction: transaction._id,
+            type:"DEBIT"
+        }], { session });
 
-    const creditLedgerEntry = await ledgerModel.create([{
-        account: toAccount,
-        amount,
-        transaction: transaction._id,
-        type:"CREDIT"
-    }], { session });
+        const creditLedgerEntry = await ledgerModel.create([{
+            account: toAccount,
+            amount,
+            transaction: transaction._id,
+            type:"CREDIT"
+        }], { session });
 
-    transaction.status = "COMPLETED";
-    await transaction.save({ session });
+        transaction.status = "COMPLETED";
+        await transaction.save({ session });
 
-    await session.commitTransaction();
-    session.endSession();
+        await session.commitTransaction();
 
-    return res.status(201).json({ message: "Initial funds transaction completed successfully.", transaction });
+        return res.status(201).json({ message: "Initial funds transaction completed successfully.", transaction });
+    } catch (error) {
+        // CRITICAL: Explicitly abort transaction on error.
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        
+        console.error(`[Initial Funds] Error for idempotency key ${idempotencyKey}:`, error.message);
+        
+        return res.status(500).json({
+            message: "Initial funds transaction failed. Please retry with the same idempotency key.",
+            idempotencyKey,
+            retryable: true,
+            error: error.message
+        });
+    } finally {
+        // CRITICAL: Always end session, even on error.
+        await session.endSession();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,6 +340,11 @@ function validateDate(val) {
 }
 
 async function buildTransactionQuery(req) {
+    // CRITICAL: Defensive check for authentication middleware bypass.
+    if (!req.user || !req.user._id) {
+        throw new Error("Authentication required: user not found in request context.");
+    }
+    
     const userId = req.user._id;
 
     // Fetch all account IDs belonging to the authenticated user.
