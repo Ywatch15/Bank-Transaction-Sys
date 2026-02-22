@@ -18,6 +18,20 @@ export default {
           900: '#092d6d',
           950: '#051c47',
         },
+        // Brand alias (same as primary for buttons/focus ring)
+        brand: {
+          50: '#f0f5fb',
+          100: '#d9e5f7',
+          200: '#b3cbef',
+          300: '#7da9e0',
+          400: '#5a8dd4',
+          500: '#3d72c9',
+          600: '#2857a6',
+          700: '#1f4283',
+          800: '#0b3d91',
+          900: '#092d6d',
+          950: '#051c47',
+        },
         // Slate for surfaces & text
         surface: {
           50: '#f8f9fa',
