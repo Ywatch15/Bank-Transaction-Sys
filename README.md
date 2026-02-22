@@ -363,9 +363,9 @@ PORT=3000
 NODE_ENV=development
 
 # MongoDB (local)
-MONGO_URI=mongodb://localhost:27017/bank-transaction-system
+MONGO_URI=YOUR LOCAL MONGODB URI
 # MongoDB Atlas example (replace placeholders with your actual credentials):
-# MONGO_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@YOUR_CLUSTER_ID.mongodb.net/bank-transaction-system
+# MONGO_URI=YOUR ATLAS URI
 
 # JWT Secret (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 JWT_SECRET=REPLACE_WITH_STRONG_RANDOM_SECRET
@@ -436,7 +436,7 @@ Content-Type: application/json
 ```json
 {
   "message": "Login successful.",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCIrthbbXVCJ9...",
   "user": {
     "_id": "507f1f77bcf86cd799439011",
     "name": "John Doe",
@@ -476,8 +476,8 @@ Content-Type: application/json
 {
   "message": "Account created successfully.",
   "account": {
-    "_id": "507f1f77bcf86cd799439012",
-    "user": "507f1f77bcf86cd799439011",
+    "_id": "507f1f77bcf86cd729489012",
+    "user": "507f1f77bcf86cd795436011",
     "currency": "INR",
     "status": "ACTIVE",
     "createdAt": "2026-02-21T10:00:00Z"
