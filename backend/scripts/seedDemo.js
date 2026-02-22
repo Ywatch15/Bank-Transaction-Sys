@@ -127,24 +127,30 @@ async function seed() {
     const session = await mongoose.startSession();
     session.startTransaction();
 
-    const txn = (
-      await transactionModel.create(
-        [{ fromAccount: sysAccount._id, toAccount: aliceAccount._id, amount: 100000, idempotencyKey, status: "PENDING" }],
+    try {
+      const txn = (
+        await transactionModel.create(
+          [{ fromAccount: sysAccount._id, toAccount: aliceAccount._id, amount: 100000, idempotencyKey, status: "PENDING" }],
+          { session }
+        )
+      )[0];
+
+      await mongoose.connection.collection("ledgers").insertMany(
+        [
+          { account: sysAccount._id, amount: 100000, transaction: txn._id, type: "DEBIT", createdAt: new Date() },
+          { account: aliceAccount._id, amount: 100000, transaction: txn._id, type: "CREDIT", createdAt: new Date() },
+        ],
         { session }
-      )
-    )[0];
+      );
 
-    await mongoose.connection.collection("ledgers").insertMany(
-      [
-        { account: sysAccount._id, amount: 100000, transaction: txn._id, type: "DEBIT", createdAt: new Date() },
-        { account: aliceAccount._id, amount: 100000, transaction: txn._id, type: "CREDIT", createdAt: new Date() },
-      ],
-      { session }
-    );
-
-    await transactionModel.findByIdAndUpdate(txn._id, { status: "COMPLETED" }, { session });
-    await session.commitTransaction();
-    session.endSession();
+      await transactionModel.findByIdAndUpdate(txn._id, { status: "COMPLETED" }, { session });
+      await session.commitTransaction();
+    } catch (txnError) {
+      await session.abortTransaction();
+      throw txnError;
+    } finally {
+      session.endSession();
+    }
 
     console.log(`  ✔  Seeded 100,000 INR initial funds into Alice's account.`);
 
