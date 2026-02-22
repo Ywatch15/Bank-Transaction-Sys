@@ -22,6 +22,12 @@ const accountSchema = new mongoose.Schema({
         required:[true,"Currency is required."],
         default:"INR"
     },
+    // Denormalized balance field for atomic updates during transactions
+    balance:{
+        type:Number,
+        default:0,
+        min:[0,"Balance cannot be negative"]
+    }
 },{
     timestamps:true
 })
