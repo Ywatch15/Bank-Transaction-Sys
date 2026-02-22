@@ -1,67 +1,127 @@
 const accountModel = require("../models/account.model");
+const auditModel = require("../models/audit.model");
+const { errorResponse, successResponse } = require("../utils/response");
+const mongoose = require("mongoose");
 
 /**
  * Freeze an account — sets status to FROZEN.
+ * 
+ * REQUIREMENT #10: Audit logging for account freeze.
+ * REQUIREMENT #11: Defensive check for authentication.
  * POST /api/admin/accounts/:accountId/freeze
  */
 async function freezeAccount(req, res) {
   try {
+    // REQUIREMENT #11: Defensive check for authentication middleware
+    if (!req.user || !req.user._id) {
+      return errorResponse(res, 401, 'unauthorized', 'Authentication required: user not found in request context.');
+    }
+
     const { accountId } = req.params;
+
+    // Validate accountId format
+    if (!mongoose.Types.ObjectId.isValid(accountId)) {
+      return errorResponse(res, 400, 'invalid_account_id', 'Invalid account ID format.');
+    }
 
     const account = await accountModel.findById(accountId);
     if (!account) {
-      return res.status(404).json({ success: false, message: "Account not found." });
+      return errorResponse(res, 404, 'account_not_found', 'Account not found.');
     }
 
     if (account.status === "FROZEN") {
-      return res.status(400).json({ success: false, message: "Account is already frozen." });
+      return errorResponse(res, 400, 'account_already_frozen', 'Account is already frozen.');
     }
 
+    // Update account status
     account.status = "FROZEN";
     await account.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Account has been frozen.",
-      account: { _id: account._id, status: account.status },
-    });
+    // REQUIREMENT #10: Audit log the freeze action
+    try {
+      await auditModel.create({
+        actor: req.user._id,
+        action: 'ACCOUNT_FROZEN',
+        entityType: 'Account',
+        entityId: account._id,
+        meta: {
+          accountId: accountId,
+          previousStatus: 'ACTIVE'
+        },
+        source: 'admin_api'
+      });
+    } catch (auditErr) {
+      console.warn('[Audit] Failed to log account freeze:', auditErr.message);
+      // Don't fail the response if audit logging fails
+    }
+
+    return successResponse(res, {
+      account: { _id: account._id, status: account.status }
+    }, 200);
   } catch (err) {
     console.error("[Admin] freezeAccount error:", err.message);
-    return res.status(500).json({ success: false, message: "Internal server error." });
+    return errorResponse(res, 500, 'server_error', 'Failed to freeze account');
   }
 }
 
 /**
  * Unfreeze an account — restores status to ACTIVE.
+ * 
+ * REQUIREMENT #10: Audit logging for account unfreeze.
+ * REQUIREMENT #11: Defensive check for authentication.
  * POST /api/admin/accounts/:accountId/unfreeze
  */
 async function unfreezeAccount(req, res) {
   try {
+    // REQUIREMENT #11: Defensive check for authentication middleware
+    if (!req.user || !req.user._id) {
+      return errorResponse(res, 401, 'unauthorized', 'Authentication required: user not found in request context.');
+    }
+
     const { accountId } = req.params;
+
+    // Validate accountId format
+    if (!mongoose.Types.ObjectId.isValid(accountId)) {
+      return errorResponse(res, 400, 'invalid_account_id', 'Invalid account ID format.');
+    }
 
     const account = await accountModel.findById(accountId);
     if (!account) {
-      return res.status(404).json({ success: false, message: "Account not found." });
+      return errorResponse(res, 404, 'account_not_found', 'Account not found.');
     }
 
     if (account.status !== "FROZEN") {
-      return res.status(400).json({
-        success: false,
-        message: `Account is not frozen (current status: ${account.status}).`,
-      });
+      return errorResponse(res, 400, 'account_not_frozen', `Account is not frozen (current status: ${account.status}).`);
     }
 
+    // Update account status
     account.status = "ACTIVE";
     await account.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Account has been unfrozen.",
-      account: { _id: account._id, status: account.status },
-    });
+    // REQUIREMENT #10: Audit log the unfreeze action
+    try {
+      await auditModel.create({
+        actor: req.user._id,
+        action: 'ACCOUNT_UNFROZEN',
+        entityType: 'Account',
+        entityId: account._id,
+        meta: {
+          accountId: accountId,
+          previousStatus: 'FROZEN'
+        },
+        source: 'admin_api'
+      });
+    } catch (auditErr) {
+      console.warn('[Audit] Failed to log account unfreeze:', auditErr.message);
+      // Don't fail the response if audit logging fails
+    }
+
+    return successResponse(res, {
+      account: { _id: account._id, status: account.status }
+    }, 200);
   } catch (err) {
     console.error("[Admin] unfreezeAccount error:", err.message);
-    return res.status(500).json({ success: false, message: "Internal server error." });
+    return errorResponse(res, 500, 'server_error', 'Failed to unfreeze account');
   }
 }
 
