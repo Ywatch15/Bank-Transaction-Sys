@@ -61,6 +61,31 @@ api.interceptors.response.use(
 
 export default api;
 
+// ────── API ROUTE CONSTANTS ──────────────────────────────────
+// Centralized endpoint paths for consistency and easy updates
+
+export const API_ROUTES = {
+  // Auth
+  login: '/api/auth/login',
+  register: '/api/auth/register',
+  logout: '/api/auth/logout',
+  
+  // Profile
+  profile: '/api/profile',
+  
+  // Accounts
+  accounts: '/api/account',
+  accountDetail: '/api/account',
+  accountBalance: '/api/account/balance',
+  
+  // Transactions
+  transactions: '/api/transactions',
+  transactionExport: '/api/transactions/export',
+  
+  // Admin
+  adminAccounts: '/api/admin/accounts',
+};
+
 // ────── API ENDPOINT HELPERS ──────────────────────────────────
 
 // AUTH
