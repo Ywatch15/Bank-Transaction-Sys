@@ -14,10 +14,21 @@ export default function AdminRoute() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
       </div>
     );
   }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isAdmin(user)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  return <Outlet />;
+}
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isAdmin(user)) return <Navigate to="/unauthorized" replace />;

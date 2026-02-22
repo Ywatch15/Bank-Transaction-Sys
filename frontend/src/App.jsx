@@ -24,7 +24,7 @@ const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard.jsx'));
 function PageSpinner() {
   return (
     <div className="flex h-screen items-center justify-center">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
     </div>
   );
 }
@@ -65,8 +65,8 @@ export default function App() {
         </Suspense>
       </main>
 
-      <footer className="border-t border-gray-800 py-4 text-center text-xs text-gray-600">
-        © {new Date().getFullYear()} Bank Transaction System
+      <footer className="border-t border-neutral-200 py-4 text-center text-xs text-neutral-600 mt-12">
+        © {new Date().getFullYear()} Bank Transaction System — Professional Banking Frontend
       </footer>
     </div>
   );

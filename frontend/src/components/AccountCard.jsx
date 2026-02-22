@@ -1,53 +1,45 @@
 /**
- * AccountCard.jsx
- * Displays an individual account's currency, status, balance, and quick actions.
- *
- * Props:
- *   account  — { _id, currency, status, balance }
- *   onTransfer(account) — called when user clicks "Transfer"
+ * AccountCard.jsx — Account summary card
+ * Displays account number (masked), balance, status, and quick actions.
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import clsx from 'clsx';
-
-const STATUS_BADGE = {
-  ACTIVE: 'badge-green',
-  FROZEN: 'badge-yellow',
-  CLOSED: 'badge-red',
-};
+import { formatCurrency, maskAccountNumber } from '../lib/format';
+import Badge from './Badge';
 
 export default function AccountCard({ account, onTransfer }) {
-  const { _id, currency = 'INR', status = 'ACTIVE', balance = 0 } = account;
+  const isFrozen = account.isFrozen;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="card flex flex-col gap-4"
+      transition={{ duration: 0.25 }}
+      className="border border-neutral-200 rounded-lg p-4 bg-white hover:shadow-card-hover transition-shadow"
     >
-      {/* Top row */}
-      <div className="flex items-start justify-between">
+      {/* Header with number and status */}
+      <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            {currency} Account
+          <p className="text-xs font-medium text-neutral-600 uppercase tracking-wide">
+            {account.currency || 'USD'} Account
           </p>
-          {/* Partial ID for display */}
-          <p className="mt-0.5 font-mono text-xs text-gray-600">
-            ···{String(_id).slice(-8)}
+          <p className="mt-1 font-mono text-sm text-neutral-700">
+            {maskAccountNumber(account.numberMasked || account._id)}
           </p>
         </div>
-        <span className={clsx(STATUS_BADGE[status] ?? 'badge-yellow')}>
-          {status}
-        </span>
+        <Badge
+          label={isFrozen ? 'Frozen' : 'Active'}
+          variant={isFrozen ? 'frozen' : 'active'}
+          size="xs"
+        />
       </div>
 
       {/* Balance */}
-      <div>
-        <p className="text-xs text-gray-500">Balance</p>
-        <p className="mt-0.5 text-2xl font-bold tabular-nums text-white">
-          {currency} {Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+      <div className="mb-4 pb-4 border-b border-neutral-100">
+        <p className="text-xs text-neutral-500 mb-1">Available Balance</p>
+        <p className="text-2xl font-bold text-primary-900">
+          {formatCurrency(account.balance, account.currency)}
         </p>
       </div>
 
@@ -55,16 +47,22 @@ export default function AccountCard({ account, onTransfer }) {
       <div className="flex gap-2">
         <button
           onClick={() => onTransfer?.(account)}
-          disabled={status !== 'ACTIVE'}
-          className="btn-primary flex-1 py-2 text-xs"
-          aria-label={`Transfer from ${currency} account`}
+          disabled={isFrozen}
+          className={`
+            flex-1 px-3 py-2 text-sm font-medium rounded transition-colors
+            ${isFrozen
+              ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+              : 'bg-primary-800 text-white hover:bg-primary-900'
+            }
+          `}
+          title={isFrozen ? 'Account is frozen' : 'Create a transfer'}
         >
           Transfer
         </button>
         <Link
-          to={`/accounts/${_id}`}
-          className="btn-secondary flex-1 py-2 text-center text-xs"
-          aria-label={`View details for ${currency} account`}
+          to={`/accounts/${account._id}`}
+          className="flex-1 px-3 py-2 text-sm font-medium rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50 transition-colors text-center"
+          title="View full account details"
         >
           Details
         </Link>

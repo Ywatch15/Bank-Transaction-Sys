@@ -1,39 +1,33 @@
 /**
- * AuthContext
- * -----------
- * Provides authentication state (user, token) and helpers (login, logout)
- * to the whole app via React context.
+ * AuthContext — Authentication state management
+ * -----------------------------------------------
+ * Provides user, loading state, and auth helpers (login, logout, refreshUser).
  *
  * Token storage strategy:
- *   - PREFERRED: If the backend sets an httpOnly cookie on login, Axios will
- *     carry it automatically when `withCredentials: true` is set in api.js.
- *     In that case the token never touches JS / localStorage.
- *   - FALLBACK: If the backend returns the token in the JSON response body
- *     (current implementation), we store it in localStorage.
- *     Trade-off: XSS risk — mitigate by keeping CSP strict & sanitising inputs.
- *     Swap to httpOnly cookies for production hardening.
+ *   - DEFAULT: localStorage (XSS risk — recommended only for dev/demo)
+ *   - PRODUCTION: Use httpOnly cookies set by backend. Disable token interceptor
+ *     in api.js and rely on `withCredentials: true` for automatic cookie inclusion.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getToken, setToken, clearToken, decodeToken } from '../lib/auth.js';
-import api from '../lib/api.js';
+import { fetchProfileAPI, loginAPI, registerAPI, logoutAPI } from '../lib/api.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  // true while we're restoring session from stored token
   const [loading, setLoading] = useState(true);
 
-  // On mount: try to restore session from stored token
+  // On mount: restore session from stored token
   useEffect(() => {
     const token = getToken();
     if (token) {
       const decoded = decodeToken(token);
       if (decoded) {
-        // Fetch fresh user profile using stored token
-        api.get('/api/profile')
-          .then(({ data }) => setUser(data.user))
-          .catch(() => clearToken())  // token expired/invalid → clear it
+        // Fetch fresh user profile
+        fetchProfileAPI()
+          .then(({ data }) => setUser(data.user || data))
+          .catch(() => clearToken())
           .finally(() => setLoading(false));
       } else {
         clearToken();
@@ -44,27 +38,24 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  /** Call after a successful login API response */
   const login = useCallback((userData, token) => {
     if (token) setToken(token);
     setUser(userData);
   }, []);
 
-  /** Clear session client-side; backend invalidates token separately */
   const logout = useCallback(async () => {
     try {
-      await api.post('/api/auth/logout');
+      await logoutAPI();
     } catch {
-      // Ignore network errors — clear client side regardless
+      // Ignore errors — clear client side regardless
     }
     clearToken();
     setUser(null);
   }, []);
 
-  /** Re-fetch user profile from backend (e.g. after profile update) */
   const refreshUser = useCallback(async () => {
-    const { data } = await api.get('/api/profile');
-    setUser(data.user);
+    const { data } = await fetchProfileAPI();
+    setUser(data.user || data);
   }, []);
 
   return (
@@ -74,7 +65,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-/** Hook: access auth state anywhere */
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');

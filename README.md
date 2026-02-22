@@ -1,6 +1,6 @@
 # Bank Transaction System
 
-A robust, production-ready **full-stack** banking application: a Node.js/Express REST API backend paired with a React + Vite + Tailwind frontend — featuring secure authentication, real-time transaction management, CSV export, admin controls, and a 3D parallax hero.
+A robust, production-ready **full-stack** banking application: a Node.js/Express REST API backend paired with a React + Vite + Tailwind frontend — featuring secure authentication, real-time transaction management, CSV export, admin controls, and professional banking UI.
 
 ---
 
@@ -915,6 +915,93 @@ app.use(cors({
 
 // Use connection pooling for MongoDB
 ```
+
+---
+
+## 🎨 Frontend Setup
+
+The frontend is a **React 18 + Vite + Tailwind** single-page application with professional banking UI, responsive design, and full backend integration.
+
+### Quick Start
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend will start at **http://localhost:5173** and proxy `/api/*` requests to the backend.
+
+### Key Features
+
+- **Professional Design System**: Navy primary colors, banking-focused typography, compact ledger tables
+- **Authentication Flow**: Login/Register with JWT token or httpOnly cookie support
+- **Dashboard**: Account overview, recent transactions, quick transfer access
+- **Transaction Ledger**: Full-featured transaction journal with sorting, filtering, CSV export
+- **Admin Console**: Freeze/unfreeze accounts (admin-only routes)
+- **Responsive**: Desktop-first, mobile-friendly layouts
+- **Accessibility**: WCAG AA compliant, keyboard navigation, screen-reader support
+- **No Heavy Animations**: Subtle micro-transitions only, respects `prefers-reduced-motion`
+
+### Technology Stack
+
+- React 18.3+ — UI framework
+- Vite 5.4+ — Build tool with HMR
+- Tailwind CSS 3.4+ — Utility-first styling
+- TanStack Table 8.19+ — Headless table library for ledgers
+- React Router 6.27+ — Client-side routing
+- Framer Motion 11.11+ — Micro-animations
+- Axios 1.7+ — HTTP client with interceptors
+- Headless UI 2.1+ — Accessible modals/dropdowns
+
+### Environment Configuration
+
+Create `frontend/.env.local`:
+
+```bash
+# Backend API URL (leave empty in dev to use Vite proxy)
+VITE_API_BASE_URL=
+
+# Use httpOnly cookies for auth (default: localStorage token)
+VITE_USE_COOKIE_AUTH=false
+
+# Disable animations (for accessibility or performance testing)
+VITE_DISABLE_ANIMATIONS=false
+```
+
+### Scripts
+
+```bash
+npm run dev        # Start Vite dev server with HMR
+npm run build      # Production build to dist/
+npm run preview    # Preview production build locally
+npm run lint       # Run ESLint
+npm run format     # Format with Prettier
+```
+
+### CORS Configuration (Important)
+
+If your frontend and backend are on **different origins** (e.g., production deployment), ensure your backend sets:
+
+```javascript
+// In backend server.js or middleware
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS || 'http://localhost:5173',
+  credentials: true  // MUST be true if using httpOnly cookies
+}));
+```
+
+**For local development:** Vite proxy handles it automatically via `vite.config.js`.
+
+### Full Frontend Documentation
+
+See [frontend/README.md](./frontend/README.md) for comprehensive guides on:
+- Component architecture
+- Custom hooks
+- API integration
+- Design system
+- Accessibility
+- Troubleshooting
 
 ---
 

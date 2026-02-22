@@ -1,52 +1,137 @@
 /**
- * Dashboard.jsx
- * Main landing page after login.
- * Shows: 3D parallax hero, account cards grid, quick-action transfer modal.
+ * Dashboard.jsx — Main dashboard with accounts overview and recent transactions
+ * Displays account cards, recent ledger, and quick transfer access.
  */
-import React, { useEffect, useState, Suspense } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import api, { API_ROUTES } from '../lib/api.js';
-import ThreeDParallaxHero from '../components/ThreeDParallaxHero.jsx';
-import AccountCard from '../components/AccountCard.jsx';
-import TransferForm from '../components/TransferForm.jsx';
+import React, { useState, useEffect } from 'react';
+import { useAccounts } from '../hooks/useAccounts';
+import { useTransactions } from '../hooks/useTransactions';
+import { useAuth } from '../hooks/useAuth';
+import AccountCard from '../components/AccountCard';
+import LedgerTable, { getDefaultLedgerColumns } from '../components/LedgerTable';
+import TransferModal from '../components/TransferModal';
+import { formatCurrency } from '../lib/format';
+import { motion } from 'framer-motion';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { showToast } = useToast();
+  const { accounts, loading: accountsLoading } = useAccounts();
+  const { transactions, loading: transLoading, fetch: fetchTransactions } = useTransactions();
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
 
-  const [accounts, setAccounts]       = useState([]);
-  const [loadingAccts, setLoadingAccts] = useState(true);
-  const [transferAccount, setTransferAccount] = useState(null); // opens modal
-
+  // Load recent transactions on mount
   useEffect(() => {
-    fetchAccounts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchTransactions({ limit: 10 }, 1);
   }, []);
 
-  async function fetchAccounts() {
-    setLoadingAccts(true);
-    try {
-      const { data } = await api.get(API_ROUTES.accounts);
-      // Backend GET /api/account returns { accounts: [...] } or array — handle both
-      const list = Array.isArray(data) ? data : (data.accounts ?? []);
-      setAccounts(list);
-    } catch {
-      showToast('Could not load accounts.', 'error');
-    } finally {
-      setLoadingAccts(false);
-    }
-  }
+  const handleTransfer = (account) => {
+    setSelectedAccount(account);
+    setTransferOpen(true);
+  };
 
-  function handleTransferSuccess() {
-    fetchAccounts(); // refresh balances
-    setTransferAccount(null);
-  }
+  const totalBalance = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+  const frozenCount = accounts.filter((a) => a.isFrozen).length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-4 py-8">
-      {/* Hero */}
-      <ThreeDParallaxHero user={user} />
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+      {/* Welcome Section */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <h1 className="text-3xl font-bold text-neutral-900">
+          Welcome back, {user?.name}
+        </h1>
+        <p className="text-neutral-600 mt-1">Manage your accounts and transactions</p>
+      </motion.div>
+
+      {/* Summary Cards */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="grid md:grid-cols-3 gap-4"
+      >
+        <div className="border border-neutral-200 rounded-lg p-6 bg-white">
+          <p className="text-xs font-medium text-neutral-600 uppercase tracking-wide">Total Balance</p>
+          <p className="text-2xl font-bold text-primary-900 mt-2">{formatCurrency(totalBalance)}</p>
+        </div>
+
+        <div className="border border-neutral-200 rounded-lg p-6 bg-white">
+          <p className="text-xs font-medium text-neutral-600 uppercase tracking-wide">Accounts</p>
+          <p className="text-2xl font-bold text-neutral-900 mt-2">{accounts.length}</p>
+        </div>
+
+        <div className="border border-neutral-200 rounded-lg p-6 bg-white">
+          <p className="text-xs font-medium text-neutral-600 uppercase tracking-wide">Frozen Accounts</p>
+          <p className="text-2xl font-bold text-debit-600 mt-2">{frozenCount}</p>
+        </div>
+      </motion.div>
+
+      {/* Accounts Grid */}
+      <motion.section
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+      >
+        <h2 className="text-xl font-semibold text-neutral-900 mb-4">Your Accounts</h2>
+        {accountsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="text-center py-12 bg-neutral-50 rounded-lg border border-neutral-200">
+            <p className="text-neutral-600">No accounts yet</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {accounts.map((account) => (
+              <AccountCard
+                key={account._id}
+                account={account}
+                onTransfer={handleTransfer}
+              />
+            ))}
+          </div>
+        )}
+      </motion.section>
+
+      {/* Recent Transactions */}
+      <motion.section
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-neutral-900">Recent Transactions</h2>
+          <a href="/transactions" className="text-sm text-primary-800 hover:text-primary-900 font-medium">
+            View All →
+          </a>
+        </div>
+        <LedgerTable
+          data={transactions}
+          columns={getDefaultLedgerColumns()}
+          isLoading={transLoading}
+          striped
+        />
+      </motion.section>
+
+      {/* Transfer Modal */}
+      {selectedAccount && (
+        <TransferModal
+          isOpen={transferOpen}
+          onClose={() => {
+            setTransferOpen(false);
+            setSelectedAccount(null);
+          }}
+          fromAccount={selectedAccount}
+          accounts={accounts}
+          onSuccess={() => {
+            // Refresh accounts and transactions
+            fetchTransactions({ limit: 10 }, 1);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
       {/* Account cards */}
       <section aria-labelledby="accounts-heading">

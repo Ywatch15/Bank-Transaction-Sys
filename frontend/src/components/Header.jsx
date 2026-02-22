@@ -1,13 +1,13 @@
 /**
- * Header.jsx — Top navigation bar
- * Shows brand logo, user avatar + name, balance hint, and mobile menu toggle.
+ * Header.jsx — Professional banking header
+ * Shows logo, navigation, user menu, and balance snapshot.
  */
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import { isAdmin } from '../lib/auth.js';
-import clsx from 'clsx';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { isAdmin } from '../lib/auth';
+import { motion } from 'framer-motion';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -15,19 +15,89 @@ export default function Header() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     await logout();
-    showToast('Logged out successfully.', 'success');
+    showToast('Logged out successfully', 'success');
     navigate('/login');
-  }
+  };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-800 bg-gray-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        {/* Brand */}
-        <Link to="/dashboard" className="flex items-center gap-2 font-bold text-white">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-xs font-extrabold text-white">B</span>
-          <span className="hidden sm:block">BankSys</span>
+    <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white shadow-sm">
+      <nav className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        {/* Logo */}
+        <Link to="/dashboard" className="flex items-center gap-2 font-bold">
+          <div className="w-8 h-8 bg-primary-800 rounded-md flex items-center justify-center text-white font-bold">
+            B
+          </div>
+          <span className="hidden sm:inline text-primary-900">Bank System</span>
+        </Link>
+
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center gap-6">
+          <Link to="/dashboard" className="text-sm text-neutral-700 hover:text-primary-800 font-medium transition-colors">
+            Dashboard
+          </Link>
+          <Link to="/accounts" className="text-sm text-neutral-700 hover:text-primary-800 font-medium transition-colors">
+            Accounts
+          </Link>
+          <Link to="/transactions" className="text-sm text-neutral-700 hover:text-primary-800 font-medium transition-colors">
+            Transactions
+          </Link>
+          {isAdmin(user) && (
+            <Link to="/admin" className="text-sm text-neutral-700 hover:text-primary-800 font-medium transition-colors">
+              Admin
+            </Link>
+          )}
+        </div>
+
+        {/* User Menu */}
+        <div className="flex items-center gap-4">
+          {user && (
+            <div className="hidden sm:flex items-center max-w-xs gap-2">
+              <div className="text-right">
+                <p className="text-xs font-medium text-neutral-900 truncate">{user.name}</p>
+                <p className="text-xs text-neutral-500">{user.email}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="w-9 h-9 rounded-full bg-primary-100 text-primary-800 flex items-center justify-center font-bold text-sm hover:bg-primary-200 transition-colors"
+              title={user?.name}
+            >
+              {user?.name?.charAt(0).toUpperCase()}
+            </button>
+
+            {menuOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="absolute right-0 mt-2 w-48 bg-white border border-neutral-200 rounded-lg shadow-lg py-2 z-50"
+              >
+                <Link
+                  to="/profile"
+                  onClick={() => setMenuOpen(false)}
+                  className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
+                >
+                  Profile Settings
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
+                >
+                  Logout
+                </button>
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </nav>
+    </header>
+  );
+}
         </Link>
 
         {/* Desktop nav */}
