@@ -27,11 +27,17 @@ export default function Transactions() {
 
   // Fetch user accounts once for direction logic
   useEffect(() => {
-    api.get(API_ROUTES.accounts).then(({ data }) => {
-      const list = Array.isArray(data) ? data : (data.accounts ?? []);
-      setAccounts(list);
-    }).catch(() => {});
-  }, []);
+    api.get(API_ROUTES.accounts)
+      .then(({ data }) => {
+        const list = Array.isArray(data) ? data : (data.accounts ?? []);
+        setAccounts(list);
+      })
+      .catch((err) => {
+        console.error('Failed to load accounts:', err.message);
+        showToast('Failed to load accounts', 'error');
+        setAccounts([]);
+      });
+  }, [showToast]);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
