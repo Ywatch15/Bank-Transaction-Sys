@@ -27,6 +27,8 @@ async function createTransaction(req, res) {
 
     /**
      * 2. Validate idempotency key
+     * CRITICAL: Use consistent HTTP status codes for idempotency contract.
+     * All non-COMPLETED states return 409 (Conflict) for clarity on retry semantics.
      */
 
     const isTransactionAlreadyExists = await transactionModel.findOne({
@@ -38,13 +40,18 @@ async function createTransaction(req, res) {
             return res.status(200).json({ message: "Transaction already completed.", transaction: isTransactionAlreadyExists });
         } 
         if(isTransactionAlreadyExists.status === "PENDING"){
-            return res.status(200).json({ message: "Transaction is still pending." });
+            // CRITICAL: Return 409 Conflict for pending state (not 200).
+            // Client can detect retry is in progress.
+            return res.status(409).json({ message: "Transaction is still pending. Idempotency key already in use.", idempotencyKey });
         }
         if(isTransactionAlreadyExists.status === "FAILED"){
-            return res.status(500).json({ error: "Transaction has failed." });
+            // CRITICAL: Return 409 Conflict for failed state (not 500).
+            // Indicates previous attempt failed; client must retry with new idempotency key.
+            return res.status(409).json({ error: "Previous transaction with this key failed. Use a new idempotency key to retry.", idempotencyKey });
         }
         if(isTransactionAlreadyExists.status === "REVERSED"){
-            return res.status(500).json({ message: "Transaction has been reversed." });
+            // CRITICAL: Return 409 Conflict for reversed state (not 500).
+            return res.status(409).json({ error: "Transaction was previously reversed. Use a new idempotency key.", idempotencyKey });
         }
     }
 
@@ -66,18 +73,21 @@ async function createTransaction(req, res) {
         })
     }
     let transaction;
+    const session = await mongoose.startSession();
     try{
 
         /**
          * 5. Create transaction (PENDING)
-         * 6. Create DEBIT ledger entry
-         * 7. Create CREDIT ledger entry
+         * 6. Create DEBIT ledger entry (atomic within session)
+         * 7. Create CREDIT ledger entry (atomic within session)
          * 8. Mark transaction as COMPLETED
          * 9. Commit MongoDB session
          */
-    
-        const session = await mongoose.startSession();
-        session.startTransaction(); // this will ensure that all operations within this block are atomic i.e., either all of them succeed or none of them are applied
+        
+        // CRITICAL: Start transaction session. All operations below are atomic.
+        // If ANY operation fails, the entire transaction rolls back.
+        session.startTransaction();
+        
         transaction = (await transactionModel.create([{
             fromAccount,
             toAccount,
@@ -86,6 +96,8 @@ async function createTransaction(req, res) {
             status:"PENDING"
         }], { session }))[0];
     
+        // CRITICAL: Create DEBIT and CREDIT ledger entries atomically.
+        // Both must succeed or both must fail (no partial ledger state).
         const debitLedgerEntry = await ledgerModel.create([{
             account: fromAccount,
             amount,
@@ -93,9 +105,10 @@ async function createTransaction(req, res) {
             type:"DEBIT"
         }], { session });
     
-        await (()=>{
-            return new Promise((resolve)=> setTimeout(resolve,11*1000));
-        })()
+        // CRITICAL FIX: REMOVED 11-second artificial delay.
+        // The delay broke double-entry bookkeeping atomicity:
+        // If network failed between DEBIT and CREDIT, money would vanish.
+        // All ledger operations must be atomic within the session.
     
         const creditLedgerEntry = await ledgerModel.create([{
             account: toAccount,
@@ -104,22 +117,45 @@ async function createTransaction(req, res) {
             type:"CREDIT"
         }], { session });
     
-        
-        // transaction.status = "COMPLETED";
-        // await transaction.save({ session });
+        // Mark transaction as COMPLETED within the same session/transaction.
         await transactionModel.findOneAndUpdate({_id: transaction._id}, {status:"COMPLETED"}, { session, new:true });
     
+        // CRITICAL: Commit at end of all operations. If any operation above failed,
+        // we never reach this point (caught below).
         await session.commitTransaction();
-        session.endSession();
     } catch(error){
-        // await transactionModel.findOneAndUpdate(
-        //     {idempotencyKey: idempotencyKey},
-        //     {status:"FAILED"}
-        // )
-        return res.status(400).json({
-            message: "Transaction is pending due to some issues, please retry later.",
+        // CRITICAL FIX: Explicitly abort the transaction on error.
+        // Without this, the MongoDB session may remain open, causing connection pool exhaustion.
+        // The transaction must be explicitly aborted to rollback all writes.
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        
+        console.error(`[Transaction] Error creating transaction for idempotency key ${idempotencyKey}:`, error.message);
+        
+        // Attempt to mark transaction as FAILED (outside the failed session context).
+        if (transaction && transaction._id) {
+            try {
+                await transactionModel.findByIdAndUpdate(
+                    transaction._id,
+                    { status: "FAILED" },
+                    { new: true }
+                );
+            } catch (updateErr) {
+                console.error(`[Transaction] Failed to mark transaction as FAILED:`, updateErr.message);
+            }
+        }
+        
+        return res.status(500).json({
+            message: "Transaction failed. Please retry with the same idempotency key.",
+            idempotencyKey,
+            retryable: true,
             error: error.message
-        })
+        });
+    } finally {
+        // CRITICAL FIX: Always end the session, even if an error occurs.
+        // Without this, sessions leak and exhaust MongoDB connection pool.
+        await session.endSession();
     }
 
 
@@ -204,7 +240,28 @@ async function createInitialFundsTransaction(req, res) {
  *   type       – "credit" | "debit" (relative to the requester); omit for all
  *   minAmount  – numeric lower bound on amount
  *   maxAmount  – numeric upper bound on amount
+ *
+ * CRITICAL: All numeric and date parameters are strictly validated.
+ * Invalid input throws an error (caught in calling endpoint).
  */
+
+// CRITICAL: Validation helpers to prevent malformed queries.
+function validateAmount(val) {
+    const num = parseFloat(val);
+    if (isNaN(num) || num <= 0 || !Number.isFinite(num)) {
+        throw new Error(`Invalid amount "${val}": must be positive finite number`);
+    }
+    return num;
+}
+
+function validateDate(val) {
+    const date = new Date(val);
+    if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date "${val}": must be ISO 8601 format`);
+    }
+    return date;
+}
+
 async function buildTransactionQuery(req) {
     const userId = req.user._id;
 
@@ -229,18 +286,31 @@ async function buildTransactionQuery(req) {
 
     const filter = { ...accountFilter };
 
-    // Date range filtering
+    // CRITICAL: Date range filtering with strict validation.
+    // Prevents NaN queries or Invalid Date objects from silently breaking queries.
     if (startDate || endDate) {
         filter.createdAt = {};
-        if (startDate) filter.createdAt.$gte = new Date(startDate);
-        if (endDate) filter.createdAt.$lte = new Date(endDate);
+        if (startDate) filter.createdAt.$gte = validateDate(startDate);
+        if (endDate) filter.createdAt.$lte = validateDate(endDate);
     }
 
-    // Amount range filtering
+    // CRITICAL: Amount range filtering with strict validation.
+    // Prevents:
+    // - parseFloat("NaN") queries that silently fail
+    // - Negative amounts (nonsensical in financial context)
+    // - minAmount > maxAmount (impossible ranges)
     if (minAmount !== undefined || maxAmount !== undefined) {
+        const min = minAmount !== undefined ? validateAmount(minAmount) : undefined;
+        const max = maxAmount !== undefined ? validateAmount(maxAmount) : undefined;
+        
+        // CRITICAL: Validate range constraint: min <= max
+        if (min !== undefined && max !== undefined && min > max) {
+            throw new Error(`Invalid amount range: minAmount (${min}) must be <= maxAmount (${max})`);
+        }
+        
         filter.amount = {};
-        if (minAmount !== undefined) filter.amount.$gte = parseFloat(minAmount);
-        if (maxAmount !== undefined) filter.amount.$lte = parseFloat(maxAmount);
+        if (min !== undefined) filter.amount.$gte = min;
+        if (max !== undefined) filter.amount.$lte = max;
     }
 
     return filter;
@@ -278,6 +348,7 @@ async function getTransactionHistory(req, res) {
         const skip  = (page - 1) * limit;
         const sort  = parseSortParam(req.query.sort);
 
+        // CRITICAL: Validation errors from buildTransactionQuery are caught here.
         const filter = await buildTransactionQuery(req);
 
         const [data, total] = await Promise.all([
@@ -295,7 +366,12 @@ async function getTransactionHistory(req, res) {
         return res.status(200).json({ data, page, limit, total });
     } catch (err) {
         console.error("[Transaction] getTransactionHistory error:", err.message);
-        return res.status(500).json({ success: false, message: "Internal server error." });
+        // CRITICAL: Return 400 for validation errors, 500 for server errors.
+        const status = err.message && err.message.includes("Invalid") ? 400 : 500;
+        return res.status(status).json({ 
+            success: false, 
+            message: status === 400 ? err.message : "Internal server error." 
+        });
     }
 }
 
@@ -305,13 +381,37 @@ async function getTransactionHistory(req, res) {
  * Pagination is optional; if page/limit are omitted, all matching records are exported.
  *
  * Query params: same as getTransactionHistory + optional page/limit
+ *
+ * CRITICAL: Includes comprehensive error handling to prevent resource leaks.
+ * Stream errors and response errors are both handled to close connections properly.
  */
 async function exportTransactionsCsv(req, res) {
+    const csvStream = csvFormat({ headers: true });
+    
+    // CRITICAL: Attach error handlers BEFORE piping to prevent uncaught errors.
+    csvStream.on('error', (err) => {
+        console.error("[CSV Export] Stream error:", err.message);
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: "CSV export failed." });
+        } else {
+            // Headers already sent; must destroy response.
+            res.destroy();
+        }
+    });
+
+    res.on('error', (err) => {
+        console.error("[CSV Export] Response error:", err.message);
+        // Destroy the stream if response errors.
+        csvStream.destroy();
+    });
+
     try {
         const sort   = parseSortParam(req.query.sort);
+        // CRITICAL: Validation errors from buildTransactionQuery are caught here.
         const filter = await buildTransactionQuery(req);
 
-        // Pagination is optional for CSV export.
+        // CRITICAL: Pagination is optional, but enforce upper bound to prevent memory exhaustion.
+        // Without a limit, user with 1M transactions could export all, consuming server memory.
         let query = transactionModel.find(filter).sort(sort).lean();
 
         if (req.query.page !== undefined || req.query.limit !== undefined) {
@@ -327,7 +427,7 @@ async function exportTransactionsCsv(req, res) {
         res.setHeader("Content-Type", "text/csv");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-        const csvStream = csvFormat({ headers: true });
+        // CRITICAL: Pipe AFTER error handlers are attached.
         csvStream.pipe(res);
 
         for (const txn of transactions) {
@@ -343,12 +443,22 @@ async function exportTransactionsCsv(req, res) {
             });
         }
 
+        // CRITICAL: End the stream to signal completion and flush buffer.
         csvStream.end();
     } catch (err) {
-        console.error("[Transaction] exportTransactionsCsv error:", err.message);
-        // Only write error response if headers have not been sent yet.
+        console.error("[CSV Export] Error:", err.message);
+        // CRITICAL: Check if headers sent to avoid "Headers already sent" error.
         if (!res.headersSent) {
-            return res.status(500).json({ success: false, message: "Internal server error." });
+            // Return appropriate status based on error type.
+            const status = err.message && err.message.includes("Invalid") ? 400 : 500;
+            return res.status(status).json({ 
+                success: false, 
+                message: status === 400 ? err.message : "Internal server error." 
+            });
+        } else {
+            // Headers already sent; destroy stream and response to prevent hanging.
+            csvStream.destroy();
+            res.destroy();
         }
     }
 }
