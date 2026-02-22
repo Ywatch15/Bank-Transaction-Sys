@@ -1,395 +1,517 @@
 const transactionModel = require('../models/transaction.model');
 const ledgerModel = require('../models/ledger.model');
 const accountModel = require('../models/account.model');
+const auditModel = require('../models/audit.model');
 const emailService = require('../services/email.service');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const { format: csvFormat } = require('fast-csv');
+
+// Import helper utilities
+const { 
+    validatePositiveAmount, 
+    validateDateISO, 
+    parseAndValidatePagination,
+    validateAmountRange,
+    validateIdempotencyKey
+} = require('../utils/validation');
+const { successResponse, errorResponse } = require('../utils/response');
+const constants = require('../config/constants');
+
 
 async function createTransaction(req, res) {
     /**
-     * 1. Validate the user request
+     * REQUIREMENT #1: Remove artificial delays (already done in code)
+     * REQUIREMENT #2: Proper MongoDB session handling
+     * REQUIREMENT #3: Atomic balance updates with conditional DB queries
+     * REQUIREMENT #4: Idempotency handling with unique index and 409 responses
+     * REQUIREMENT #5: Validation helpers for input validation
+     * REQUIREMENT #11: Null/defensive checks (req.user validation)
      */
-    const{ fromAccount, toAccount, amount, idempotencyKey } = req.body;
 
-    if(!fromAccount || !toAccount || !amount || !idempotencyKey){
-        return res.status(400).json({ error: "Missing required fields." });
-    }
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 1: Input Validation
+    // ─────────────────────────────────────────────────────────────────────────
     
-    // CRITICAL FIX #5: Validate idempotencyKey format and length.
-    // Prevents whitespace-only or single-character keys that could collide.
-    if (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length < 8) {
-        return res.status(400).json({ 
-            error: "Invalid idempotency key: must be non-empty string, minimum 8 characters." 
-        });
-    }
-    const fromUserAccount = await accountModel.findOne({
-        _id: fromAccount,
-    })
-    const toUserAccount = await accountModel.findOne({
-        _id: toAccount,
-    })
+    const { fromAccount, toAccount, amount, idempotencyKey } = req.body;
 
-    if(!fromUserAccount || !toUserAccount){
-        return res.status(404).json({ error: "One or both accounts not found." });
+    // REQUIREMENT #11: Defensive null check for authentication middleware
+    if (!req.user || !req.user._id) {
+        return errorResponse(res, 401, 'unauthorized', 'Authentication required: user not found in request context.');
     }
 
-    /**
-     * 2. Validate idempotency key
-     * CRITICAL: Use consistent HTTP status codes for idempotency contract.
-     * All non-COMPLETED states return 409 (Conflict) for clarity on retry semantics.
-     */
+    // Check for required fields
+    if (!fromAccount || !toAccount || !amount || !idempotencyKey) {
+        return errorResponse(res, 400, 'missing_fields', 'Missing required fields: fromAccount, toAccount, amount, idempotencyKey.');
+    }
 
-    const isTransactionAlreadyExists = await transactionModel.findOne({
-        idempotencyKey: idempotencyKey,
-    })
+    // REQUIREMENT #5: Use validation helper for positive amount
+    try {
+        var validAmount = validatePositiveAmount(amount);
+    } catch (err) {
+        return errorResponse(res, 400, 'invalid_amount', err.message);
+    }
 
-    if(isTransactionAlreadyExists){
-        if(isTransactionAlreadyExists.status === "COMPLETED"){
-            return res.status(200).json({ message: "Transaction already completed.", transaction: isTransactionAlreadyExists });
-        } 
-        if(isTransactionAlreadyExists.status === "PENDING"){
-            // CRITICAL: Return 409 Conflict for pending state (not 200).
-            // Client can detect retry is in progress.
-            return res.status(409).json({ message: "Transaction is still pending. Idempotency key already in use.", idempotencyKey });
-        }
-        if(isTransactionAlreadyExists.status === "FAILED"){
-            // CRITICAL: Return 409 Conflict for failed state (not 500).
-            // Indicates previous attempt failed; client must retry with new idempotency key.
-            return res.status(409).json({ error: "Previous transaction with this key failed. Use a new idempotency key to retry.", idempotencyKey });
-        }
-        if(isTransactionAlreadyExists.status === "REVERSED"){
-            // CRITICAL: Return 409 Conflict for reversed state (not 500).
-            return res.status(409).json({ error: "Transaction was previously reversed. Use a new idempotency key.", idempotencyKey });
+    // REQUIREMENT #5: Use validation helper for idempotency key format
+    try {
+        validateIdempotencyKey(idempotencyKey);
+    } catch (err) {
+        return errorResponse(res, 400, 'invalid_idempotency_key', err.message);
+    }
+
+    // REQUIREMENT #11: Validate account IDs are valid MongoDB ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(fromAccount) || !mongoose.Types.ObjectId.isValid(toAccount)) {
+        return errorResponse(res, 400, 'invalid_account_id', 'Invalid account ID format.');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 2: Check Idempotency Key (before session to avoid unnecessary work)
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    const existingTxn = await transactionModel.findOne({ idempotencyKey });
+
+    if (existingTxn) {
+        if (existingTxn.status === 'COMPLETED') {
+            return successResponse(res, { transaction: existingTxn }, 200);
+        } else if (existingTxn.status === 'PENDING') {
+            return errorResponse(res, 409, 'idempotency_conflict', 'Transaction is pending. Idempotency key already in use.', { idempotencyKey });
+        } else if (existingTxn.status === 'FAILED' || existingTxn.status === 'REVERSED') {
+            return errorResponse(res, 409, 'idempotency_conflict', `Previous transaction with this key was ${existingTxn.status.toLowerCase()}. Use a new idempotency key.`, { idempotencyKey });
         }
     }
 
-    let transaction;
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 3: Fetch Accounts (preliminary check, will verify again in session)
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    const [fromAcctCheck, toAcctCheck] = await Promise.all([
+        accountModel.findById(fromAccount),
+        accountModel.findById(toAccount)
+    ]);
+
+    if (!fromAcctCheck || !toAcctCheck) {
+        return errorResponse(res, 404, 'account_not_found', 'One or both accounts not found.');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 4: Execute Transaction with Session (REQUIREMENT #2)
+    // ─────────────────────────────────────────────────────────────────────────
+    
     const session = await mongoose.startSession();
-    try{
+    let transaction = null;
 
-        /**
-         * 2. Check account status (MOVED INSIDE SESSION)
-         * 3. Derive sender balance from ledger entries (MOVED INSIDE SESSION)
-         * 4. Create transaction (PENDING)
-         * 5. Create DEBIT ledger entry (atomic within session)
-         * 6. Create CREDIT ledger entry (atomic within session)
-         * 7. Mark transaction as COMPLETED
-         * 8. Commit MongoDB session
-         */
-        
-        // CRITICAL: Start transaction session. All operations below are atomic.
-        // If ANY operation fails, the entire transaction rolls back.
+    try {
         session.startTransaction();
-        
-        // CRITICAL FIX #3: Check account status INSIDE session to prevent race condition.
-        // Prevents admin from freezing account between check and transaction execution.
+
+        // REQUIREMENT #11: Defensive re-check of accounts inside session to prevent race condition
         const fromAcct = await accountModel.findOne(
-            { _id: fromAccount },
+            { _id: fromAccount, status: 'ACTIVE' },
             null,
             { session }
         );
+
         const toAcct = await accountModel.findOne(
-            { _id: toAccount },
+            { _id: toAccount, status: 'ACTIVE' },
             null,
             { session }
         );
-        
+
         if (!fromAcct || !toAcct) {
-            throw new Error("One or both accounts not found or locked by another transaction.");
+            throw new Error('One or both accounts not found or not in ACTIVE status.');
         }
-        
-        if (fromAcct.status !== "ACTIVE" || toAcct.status !== "ACTIVE") {
-            throw new Error("One or both accounts are not active.");
+
+        // REQUIREMENT #3: Atomic balance update using conditional DB query
+        // Use updateOne with condition: only update if balance >= amount AND status = ACTIVE
+        // This prevents double-spend race condition at the database level
+        const updateResult = await accountModel.updateOne(
+            {
+                _id: fromAccount,
+                balance: { $gte: validAmount },
+                status: 'ACTIVE'
+            },
+            {
+                $inc: { balance: -validAmount }
+            },
+            { session }
+        );
+
+        if (updateResult.matchedCount === 0) {
+            // Could mean balance insufficient, status not ACTIVE, or account doesn't exist
+            throw new Error('Insufficient funds or account not eligible for transaction.');
         }
-        
-        // CRITICAL FIX #2: Check balance INSIDE session to prevent race condition (double-spend).
-        // Prevents concurrent requests from both passing balance check and overdrafting account.
-        // Use aggregation pipeline within session context for accurate balance calculation.
-        const balanceData = await ledgerModel.aggregate([
-            { $match: { account: mongoose.Types.ObjectId(fromAccount) } },
-            { 
-                $group: { 
-                    _id: null, 
-                    balance: { 
-                        $sum: { 
-                            $cond: [
-                                { $eq: ["$type", "CREDIT"] },
-                                "$amount",
-                                { $multiply: ["$amount", -1] }
-                            ]
-                        } 
-                    } 
-                } 
-            }
-        ], { session });
-        
-        const balance = balanceData[0]?.balance ?? 0;
-        
-        if (balance < amount) {
-            throw new Error(`Insufficient funds. Current balance is ${balance}, requested amount is ${amount}.`);
-        }
-        
-        transaction = (await transactionModel.create([{
+
+        // Create transaction record
+        transaction = await transactionModel.create([{
             fromAccount,
             toAccount,
-            amount,
+            amount: validAmount,
             idempotencyKey,
-            status:"PENDING"
-        }], { session }))[0];
-    
-        // CRITICAL: Create DEBIT and CREDIT ledger entries atomically.
-        // Both must succeed or both must fail (no partial ledger state).
-        const debitLedgerEntry = await ledgerModel.create([{
+            status: 'PENDING'
+        }], { session });
+        transaction = transaction[0];
+
+        // Create DEBIT ledger entry
+        await ledgerModel.create([{
             account: fromAccount,
-            amount,
+            amount: validAmount,
             transaction: transaction._id,
-            type:"DEBIT"
+            type: 'DEBIT'
         }], { session });
-    
-        // CRITICAL FIX: REMOVED 11-second artificial delay.
-        // The delay broke double-entry bookkeeping atomicity:
-        // If network failed between DEBIT and CREDIT, money would vanish.
-        // All ledger operations must be atomic within the session.
-    
-        const creditLedgerEntry = await ledgerModel.create([{
+
+        // REQUIREMENT #1: No artificial delay. Removed 11-second sleep that broke atomicity.
+        // All ledger operations are atomic within this session.
+
+        // Create CREDIT ledger entry
+        await ledgerModel.create([{
             account: toAccount,
-            amount,
+            amount: validAmount,
             transaction: transaction._id,
-            type:"CREDIT"
+            type: 'CREDIT'
         }], { session });
-    
-        // Mark transaction as COMPLETED within the same session/transaction.
-        await transactionModel.findOneAndUpdate({_id: transaction._id}, {status:"COMPLETED"}, { session, new:true });
-    
-        // CRITICAL: Commit at end of all operations. If any operation above failed,
-        // we never reach this point (caught below).
+
+        // Update target account balance
+        await accountModel.updateOne(
+            { _id: toAccount, status: 'ACTIVE' },
+            { $inc: { balance: validAmount } },
+            { session }
+        );
+
+        // Mark transaction as COMPLETED
+        await transactionModel.findByIdAndUpdate(
+            transaction._id,
+            { status: 'COMPLETED' },
+            { session, new: true }
+        );
+
+        // REQUIREMENT #10: Audit logging for transaction completion
+        try {
+            await auditModel.create([{
+                actor: req.user._id,
+                action: 'TRANSACTION_COMPLETED',
+                entityType: 'Transaction',
+                entityId: transaction._id,
+                meta: {
+                    fromAccount,
+                    toAccount,
+                    amount: validAmount,
+                    idempotencyKey
+                },
+                source: 'transaction_api'
+            }], { session });
+        } catch (auditErr) {
+            console.warn('[Audit] Failed to log transaction completion:', auditErr.message);
+            // Don't fail the transaction if audit logging fails; just warn
+        }
+
         await session.commitTransaction();
-    } catch(error){
-        // CRITICAL FIX: Explicitly abort the transaction on error.
-        // Without this, the MongoDB session may remain open, causing connection pool exhaustion.
-        // The transaction must be explicitly aborted to rollback all writes.
+
+    } catch (error) {
         if (session.inTransaction()) {
             await session.abortTransaction();
         }
-        
+
         console.error(`[Transaction] Error creating transaction for idempotency key ${idempotencyKey}:`, error.message);
-        
-        // Attempt to mark transaction as FAILED (outside the failed session context).
+
+        // REQUIREMENT #2: Mark transaction as FAILED if it was created but failed later
         if (transaction && transaction._id) {
             try {
                 await transactionModel.findByIdAndUpdate(
                     transaction._id,
-                    { status: "FAILED" },
+                    { status: 'FAILED' },
                     { new: true }
                 );
             } catch (updateErr) {
-                console.error(`[Transaction] Failed to mark transaction as FAILED:`, updateErr.message);
+                console.error('[Transaction] Failed to mark transaction as FAILED:', updateErr.message);
             }
         }
-        
-        return res.status(500).json({
-            message: "Transaction failed. Please retry with the same idempotency key.",
-            idempotencyKey,
-            retryable: true,
-            error: error.message
-        });
+
+        // Determine appropriate error code and message
+        if (error.message.includes('Insufficient funds')) {
+            return errorResponse(res, 400, 'insufficient_funds', error.message);
+        } else if (error.message.includes('not in ACTIVE status')) {
+            return errorResponse(res, 400, 'account_not_eligible', error.message);
+        } else {
+            return errorResponse(res, 500, 'transaction_failed', 'Transaction failed. Please retry with the same idempotency key.');
+        }
     } finally {
-        // CRITICAL FIX: Always end the session, even if an error occurs.
-        // Without this, sessions leak and exhaust MongoDB connection pool.
+        // REQUIREMENT #2: Always end session to prevent connection pool exhaustion
         await session.endSession();
     }
 
-
-    /**
-     * 9. Send email notification (after transaction committed, non-critical)
-     */
-
-    // CRITICAL FIX #4: Handle email failure gracefully.
-    // Email is non-critical (transaction already succeeded).
-    // Log failures for retry queue, but don't fail the API response.
-    try {
-        await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toAccount);
-    } catch (emailErr) {
-        console.warn(`[Transaction] Email notification failed for transaction ${transaction._id}:`, emailErr.message);
-        // TODO: Queue for retry or use notification service with retry logic
-    }
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 5: Send notification (non-critical, outside transaction)
+    // ─────────────────────────────────────────────────────────────────────────
     
-    return res.status(201).json({ message: "Transaction completed successfully.", transaction });
+    // REQUIREMENT #4: Handle email failure gracefully (non-blocking)
+    try {
+        await emailService.sendTransactionEmail(req.user.email, req.user.name, validAmount, toAccount);
+    } catch (emailErr) {
+        console.warn(`[Email] Notification failed for transaction ${transaction._id}:`, emailErr.message);
+        // Don't fail API response; email is non-critical
+    }
+
+    return successResponse(res, { transaction }, 201);
 }
 
+
 async function createInitialFundsTransaction(req, res) {
-    const {toAccount, amount, idempotencyKey} = req.body;
+    /**
+     * Creates initial funding transaction from system admin account to user account.
+     * Uses same session handling and validation as regular transactions.
+     */
 
-    if(!toAccount || !amount || !idempotencyKey){
-        return res.status(400).json({ error: "Missing required fields." });
-    }
-    
-    // CRITICAL FIX #5: Validate idempotencyKey format and length.
-    if (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length < 8) {
-        return res.status(400).json({ 
-            error: "Invalid idempotency key: must be non-empty string, minimum 8 characters." 
-        });
+    // REQUIREMENT #11: Defensive null check for authentication
+    if (!req.user || !req.user._id) {
+        return errorResponse(res, 401, 'unauthorized', 'Authentication required: user not found in request context.');
     }
 
-    const toUserAccount = await accountModel.findOne({
-        _id: toAccount,
-    })
+    const { toAccount, amount, idempotencyKey } = req.body;
 
-    if(!toUserAccount){
-        return res.status(404).json({ error: "Account not found." });
+    // Check for required fields
+    if (!toAccount || !amount || !idempotencyKey) {
+        return errorResponse(res, 400, 'missing_fields', 'Missing required fields: toAccount, amount, idempotencyKey.');
     }
 
-    const fromUserAccount = await accountModel.findOne({
-        // systemUser: true,
-        currency: toUserAccount.currency,
-        user: req.user._id
-    })
-    if(!fromUserAccount){
-        return res.status(404).json({ error: "System user account not found." });
-    }
-
-    const session = await mongoose.startSession();
+    // REQUIREMENT #5: Use validation helper for positive amount
     try {
-        // CRITICAL FIX #1: Add try/catch/finally for session error handling.
-        // Prevents session leaks when errors occur during transaction processing.
+        var validAmount = validatePositiveAmount(amount);
+    } catch (err) {
+        return errorResponse(res, 400, 'invalid_amount', err.message);
+    }
+
+    // REQUIREMENT #5: Use validation helper for idempotency key
+    try {
+        validateIdempotencyKey(idempotencyKey);
+    } catch (err) {
+        return errorResponse(res, 400, 'invalid_idempotency_key', err.message);
+    }
+
+    // REQUIREMENT #11: Validate account ID format
+    if (!mongoose.Types.ObjectId.isValid(toAccount)) {
+        return errorResponse(res, 400, 'invalid_account_id', 'Invalid account ID format.');
+    }
+
+    // Check idempotency before session
+    const existingTxn = await transactionModel.findOne({ idempotencyKey });
+
+    if (existingTxn) {
+        if (existingTxn.status === 'COMPLETED') {
+            return successResponse(res, { transaction: existingTxn }, 200);
+        } else {
+            return errorResponse(res, 409, 'idempotency_conflict', `Transaction already exists with status: ${existingTxn.status}`, { idempotencyKey });
+        }
+    }
+
+    // Fetch accounts (preliminary check)
+    const [toAcct, systemAcct] = await Promise.all([
+        accountModel.findById(toAccount),
+        accountModel.findOne({ user: req.user._id })
+    ]);
+
+    if (!toAcct) {
+        return errorResponse(res, 404, 'account_not_found', 'Target account not found.');
+    }
+
+    if (!systemAcct) {
+        return errorResponse(res, 404, 'system_account_not_found', 'System user account not found.');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Execute with session (REQUIREMENT #2)
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    const session = await mongoose.startSession();
+    let transaction = null;
+
+    try {
         session.startTransaction();
 
-        const transaction = new transactionModel({
-            fromAccount: fromUserAccount._id,
+        // REQUIREMENT #11: Re-check target account inside session
+        const targetAcct = await accountModel.findOne(
+            { _id: toAccount, status: 'ACTIVE' },
+            null,
+            { session }
+        );
+
+        if (!targetAcct) {
+            throw new Error('Target account not found or not in ACTIVE status.');
+        }
+
+        // Create transaction record
+        transaction = await transactionModel.create([{
+            fromAccount: systemAcct._id,
             toAccount,
-            amount,
+            amount: validAmount,
             idempotencyKey,
-            status:"PENDING"
-        });
+            status: 'PENDING'
+        }], { session });
+        transaction = transaction[0];
 
-        const debitLedgerEntry = await ledgerModel.create([{
-            account: fromUserAccount._id,
-            amount,
+        // Create DEBIT ledger entry (from system account)
+        await ledgerModel.create([{
+            account: systemAcct._id,
+            amount: validAmount,
             transaction: transaction._id,
-            type:"DEBIT"
+            type: 'DEBIT'
         }], { session });
 
-        const creditLedgerEntry = await ledgerModel.create([{
+        // Create CREDIT ledger entry (to target account)
+        await ledgerModel.create([{
             account: toAccount,
-            amount,
+            amount: validAmount,
             transaction: transaction._id,
-            type:"CREDIT"
+            type: 'CREDIT'
         }], { session });
 
-        transaction.status = "COMPLETED";
-        await transaction.save({ session });
+        // Update account balances atomically
+        await accountModel.updateOne(
+            { _id: systemAcct._id },
+            { $inc: { balance: -validAmount } },
+            { session }
+        );
+
+        await accountModel.updateOne(
+            { _id: toAccount },
+            { $inc: { balance: validAmount } },
+            { session }
+        );
+
+        // Mark transaction as COMPLETED
+        await transactionModel.findByIdAndUpdate(
+            transaction._id,
+            { status: 'COMPLETED' },
+            { session, new: true }
+        );
+
+        // REQUIREMENT #10: Audit logging
+        try {
+            await auditModel.create([{
+                actor: req.user._id,
+                action: 'TRANSACTION_COMPLETED',
+                entityType: 'Transaction',
+                entityId: transaction._id,
+                meta: {
+                    type: 'initial_funding',
+                    toAccount,
+                    amount: validAmount,
+                    idempotencyKey
+                },
+                source: 'initial_funds_api'
+            }], { session });
+        } catch (auditErr) {
+            console.warn('[Audit] Failed to log initial funds transaction:', auditErr.message);
+        }
 
         await session.commitTransaction();
 
-        return res.status(201).json({ message: "Initial funds transaction completed successfully.", transaction });
     } catch (error) {
-        // CRITICAL: Explicitly abort transaction on error.
         if (session.inTransaction()) {
             await session.abortTransaction();
         }
-        
+
         console.error(`[Initial Funds] Error for idempotency key ${idempotencyKey}:`, error.message);
-        
-        return res.status(500).json({
-            message: "Initial funds transaction failed. Please retry with the same idempotency key.",
-            idempotencyKey,
-            retryable: true,
-            error: error.message
-        });
+
+        if (transaction && transaction._id) {
+            try {
+                await transactionModel.findByIdAndUpdate(
+                    transaction._id,
+                    { status: 'FAILED' },
+                    { new: true }
+                );
+            } catch (updateErr) {
+                console.error('[Initial Funds] Failed to mark transaction as FAILED:', updateErr.message);
+            }
+        }
+
+        if (error.message.includes('not in ACTIVE status')) {
+            return errorResponse(res, 400, 'account_not_eligible', error.message);
+        } else {
+            return errorResponse(res, 500, 'transaction_failed', 'Initial funds transaction failed. Please retry with the same idempotency key.');
+        }
     } finally {
-        // CRITICAL: Always end session, even on error.
+        // REQUIREMENT #2: Always end session
         await session.endSession();
     }
+
+    return successResponse(res, { transaction }, 201);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers shared by history and CSV export
+// Helper Functions for Transaction Filtering & Pagination
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * buildTransactionQuery(req)
- * Resolves the user's accounts and constructs a Mongoose filter object
- * from the request query params.
+ * 
+ * REQUIREMENT #5: Use validation helpers to build a safe filter object.
+ * REQUIREMENT #11: Defensive checks for req.user.
+ * Constructs a Mongoose filter from request query parameters with strict validation.
  *
  * Supported params:
- *   startDate  – ISO date string; filter createdAt >= startDate
- *   endDate    – ISO date string; filter createdAt <= endDate
- *   type       – "credit" | "debit" (relative to the requester); omit for all
+ *   startDate  – ISO 8601 date string; filter createdAt >= startDate
+ *   endDate    – ISO 8601 date string; filter createdAt <= endDate
+ *   type       – "credit" | "debit" (relative to requester); omit for all
  *   minAmount  – numeric lower bound on amount
  *   maxAmount  – numeric upper bound on amount
- *
- * CRITICAL: All numeric and date parameters are strictly validated.
- * Invalid input throws an error (caught in calling endpoint).
  */
-
-// CRITICAL: Validation helpers to prevent malformed queries.
-function validateAmount(val) {
-    const num = parseFloat(val);
-    if (isNaN(num) || num <= 0 || !Number.isFinite(num)) {
-        throw new Error(`Invalid amount "${val}": must be positive finite number`);
-    }
-    return num;
-}
-
-function validateDate(val) {
-    const date = new Date(val);
-    if (isNaN(date.getTime())) {
-        throw new Error(`Invalid date "${val}": must be ISO 8601 format`);
-    }
-    return date;
-}
-
 async function buildTransactionQuery(req) {
-    // CRITICAL: Defensive check for authentication middleware bypass.
+    // REQUIREMENT #11: Defensive check for authentication middleware bypass
     if (!req.user || !req.user._id) {
-        throw new Error("Authentication required: user not found in request context.");
+        throw new Error('Authentication required: user not found in request context.');
     }
-    
+
     const userId = req.user._id;
 
-    // Fetch all account IDs belonging to the authenticated user.
-    const userAccounts = await accountModel.find({ user: userId }).select("_id");
+    // Fetch all account IDs belonging to the authenticated user
+    const userAccounts = await accountModel.find({ user: userId }).select('_id');
     const accountIds = userAccounts.map((a) => a._id);
+
+    // REQUIREMENT #11: If user has no accounts, return safe empty filter
+    if (accountIds.length === 0) {
+        return { _id: { $exists: false } }; // Never matches; user has no accounts
+    }
 
     const { startDate, endDate, type, minAmount, maxAmount } = req.query;
 
-    // Base: only return transactions involving the user's accounts.
+    // Build account filter based on transaction type
     let accountFilter;
-    if (type === "credit") {
+    if (type === 'credit') {
         accountFilter = { toAccount: { $in: accountIds } };
-    } else if (type === "debit") {
+    } else if (type === 'debit') {
         accountFilter = { fromAccount: { $in: accountIds } };
     } else {
-        // transfer / default → either side
+        // Default: both credit and debit transactions
         accountFilter = {
-            $or: [{ fromAccount: { $in: accountIds } }, { toAccount: { $in: accountIds } }],
+            $or: [
+                { fromAccount: { $in: accountIds } },
+                { toAccount: { $in: accountIds } }
+            ]
         };
     }
 
     const filter = { ...accountFilter };
 
-    // CRITICAL: Date range filtering with strict validation.
-    // Prevents NaN queries or Invalid Date objects from silently breaking queries.
+    // REQUIREMENT #5: Validate and apply date range filter
     if (startDate || endDate) {
         filter.createdAt = {};
-        if (startDate) filter.createdAt.$gte = validateDate(startDate);
-        if (endDate) filter.createdAt.$lte = validateDate(endDate);
+        if (startDate) {
+            const startDateObj = validateDateISO(startDate);
+            filter.createdAt.$gte = startDateObj;
+        }
+        if (endDate) {
+            const endDateObj = validateDateISO(endDate);
+            filter.createdAt.$lte = endDateObj;
+        }
     }
 
-    // CRITICAL: Amount range filtering with strict validation.
-    // Prevents:
-    // - parseFloat("NaN") queries that silently fail
-    // - Negative amounts (nonsensical in financial context)
-    // - minAmount > maxAmount (impossible ranges)
+    // REQUIREMENT #5: Validate and apply amount range filter
     if (minAmount !== undefined || maxAmount !== undefined) {
-        const min = minAmount !== undefined ? validateAmount(minAmount) : undefined;
-        const max = maxAmount !== undefined ? validateAmount(maxAmount) : undefined;
-        
-        // CRITICAL: Validate range constraint: min <= max
-        if (min !== undefined && max !== undefined && min > max) {
-            throw new Error(`Invalid amount range: minAmount (${min}) must be <= maxAmount (${max})`);
-        }
-        
+        const min = minAmount !== undefined ? validatePositiveAmount(minAmount) : undefined;
+        const max = maxAmount !== undefined ? validatePositiveAmount(maxAmount) : undefined;
+
+        // REQUIREMENT #6: Validate min <= max constraint
+        validateAmountRange(min, max);
+
         filter.amount = {};
         if (min !== undefined) filter.amount.$gte = min;
         if (max !== undefined) filter.amount.$lte = max;
@@ -400,146 +522,254 @@ async function buildTransactionQuery(req) {
 
 /**
  * parseSortParam(sortParam)
+ * 
+ * REQUIREMENT #15: Use sort field whitelist from constants.
  * Converts "field:asc" or "field:desc" string to a Mongoose sort object.
  * Defaults to { createdAt: -1 } (newest first).
  */
 function parseSortParam(sortParam) {
-    const ALLOWED_SORT_FIELDS = ["createdAt", "amount", "status", "updatedAt"];
-
     if (!sortParam) return { createdAt: -1 };
 
-    const [field, direction] = sortParam.split(":");
-    if (!ALLOWED_SORT_FIELDS.includes(field)) return { createdAt: -1 };
+    const [field, direction] = sortParam.split(':');
 
-    return { [field]: direction === "asc" ? 1 : -1 };
+    // REQUIREMENT #15: Only allow whitelisted sort fields
+    if (!constants.ALLOWED_SORT_FIELDS.includes(field)) {
+        return { createdAt: -1 };
+    }
+
+    return { [field]: direction === 'asc' ? 1 : -1 };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+
 /**
  * GET /api/transactions
- * Returns paginated, filtered transaction history for the authenticated user.
+ * 
+ * REQUIREMENT #7: Use aggregation pipeline to avoid N+1 population queries.
+ * Returns paginated, filtered transaction history for authenticated user.
  *
  * Query params: startDate, endDate, type, minAmount, maxAmount, page, limit, sort
- * Response: { data, page, limit, total }
+ * Response: { success: true, data: [...], meta: { page, limit, total } }
  */
 async function getTransactionHistory(req, res) {
     try {
-        const page  = Math.max(1, parseInt(req.query.page  ?? "1",  10));
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit ?? "20", 10)));
-        const skip  = (page - 1) * limit;
-        const sort  = parseSortParam(req.query.sort);
+        // REQUIREMENT #12: Use constants for pagination limits
+        const { page, limit } = parseAndValidatePagination(
+            req.query.page,
+            req.query.limit,
+            constants.TRANSACTION_HISTORY_MAX_LIMIT
+        );
 
-        // CRITICAL: Validation errors from buildTransactionQuery are caught here.
+        const skip = (page - 1) * limit;
+        const sort = parseSortParam(req.query.sort);
+
+        // REQUIREMENT #5: Build filter with validation
         const filter = await buildTransactionQuery(req);
 
-        const [data, total] = await Promise.all([
-            transactionModel
-                .find(filter)
-                .sort(sort)
-                .skip(skip)
-                .limit(limit)
-                .populate("fromAccount", "currency status")
-                .populate("toAccount", "currency status")
-                .lean(),
-            transactionModel.countDocuments(filter),
+        // REQUIREMENT #7: Use aggregation pipeline with $lookup to prevent N+1 queries
+        const [data, countResult] = await Promise.all([
+            transactionModel.aggregate([
+                { $match: filter },
+                {
+                    $lookup: {
+                        from: 'accounts',
+                        localField: 'fromAccount',
+                        foreignField: '_id',
+                        as: 'fromAccountData'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'accounts',
+                        localField: 'toAccount',
+                        foreignField: '_id',
+                        as: 'toAccountData'
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        fromAccount: { $arrayElemAt: ['$fromAccountData._id', 0] },
+                        toAccount: { $arrayElemAt: ['$toAccountData._id', 0] },
+                        fromAccountCurrency: { $arrayElemAt: ['$fromAccountData.currency', 0] },
+                        toAccountCurrency: { $arrayElemAt: ['$toAccountData.currency', 0] },
+                        fromAccountStatus: { $arrayElemAt: ['$fromAccountData.status', 0] },
+                        toAccountStatus: { $arrayElemAt: ['$toAccountData.status', 0] },
+                        amount: 1,
+                        status: 1,
+                        idempotencyKey: 1,
+                        createdAt: 1,
+                        updatedAt: 1
+                    }
+                },
+                { $sort: sort },
+                { $skip: skip },
+                { $limit: limit }
+            ]),
+            transactionModel.aggregate([
+                { $match: filter },
+                { $count: 'total' }
+            ])
         ]);
 
-        return res.status(200).json({ data, page, limit, total });
+        const total = countResult[0]?.total ?? 0;
+
+        return successResponse(res, { 
+            transactions: data, 
+            meta: { page, limit, total } 
+        }, 200);
+
     } catch (err) {
-        console.error("[Transaction] getTransactionHistory error:", err.message);
-        // CRITICAL: Return 400 for validation errors, 500 for server errors.
-        const status = err.message && err.message.includes("Invalid") ? 400 : 500;
-        return res.status(status).json({ 
-            success: false, 
-            message: status === 400 ? err.message : "Internal server error." 
-        });
+        console.error('[Transaction] getTransactionHistory error:', err.message);
+        
+        // Determine error type for appropriate response
+        if (err.message && err.message.includes('Invalid')) {
+            return errorResponse(res, 400, 'invalid_request', err.message);
+        } else {
+            return errorResponse(res, 500, 'server_error', 'Failed to retrieve transaction history');
+        }
     }
 }
 
 /**
  * GET /api/transactions/export
- * Streams a CSV file of the filtered transactions.
- * Pagination is optional; if page/limit are omitted, all matching records are exported.
+ * 
+ * REQUIREMENT #8: Robust CSV streaming with comprehensive error handling and randomized filename.
+ * REQUIREMENT #12: Use CSV_EXPORT_MAX_LIMIT from constants.
+ * Streams a CSV file of filtered transactions with cursor-based pagination.
  *
  * Query params: same as getTransactionHistory + optional page/limit
- *
- * CRITICAL: Includes comprehensive error handling to prevent resource leaks.
- * Stream errors and response errors are both handled to close connections properly.
+ * Response: CSV file download or error JSON
  */
 async function exportTransactionsCsv(req, res) {
     const csvStream = csvFormat({ headers: true });
-    
-    // CRITICAL: Attach error handlers BEFORE piping to prevent uncaught errors.
+
+    // REQUIREMENT #8: Attach error handlers BEFORE piping to prevent uncaught stream errors
     csvStream.on('error', (err) => {
-        console.error("[CSV Export] Stream error:", err.message);
+        console.error('[CSV Export] Stream format error:', err.message);
         if (!res.headersSent) {
-            res.status(500).json({ success: false, message: "CSV export failed." });
+            return errorResponse(res, 500, 'stream_error', 'CSV formatting failed');
         } else {
-            // Headers already sent; must destroy response.
+            // Headers already sent; must destroy response to prevent hanging
+            csvStream.destroy();
             res.destroy();
         }
     });
 
     res.on('error', (err) => {
-        console.error("[CSV Export] Response error:", err.message);
-        // Destroy the stream if response errors.
-        csvStream.destroy();
+        console.error('[CSV Export] Response error:', err.message);
+        // Destroy the stream if response errors
+        try {
+            csvStream.destroy();
+        } catch (destroyErr) {
+            console.error('[CSV Export] Error destroying stream:', destroyErr.message);
+        }
     });
 
     try {
-        const sort   = parseSortParam(req.query.sort);
-        // CRITICAL: Validation errors from buildTransactionQuery are caught here.
+        const sort = parseSortParam(req.query.sort);
+
+        // REQUIREMENT #5: Build filter with validation
         const filter = await buildTransactionQuery(req);
 
-        // CRITICAL: Pagination is optional, but enforce upper bound to prevent memory exhaustion.
-        // Without a limit, user with 1M transactions could export all, consuming server memory.
-        let query = transactionModel.find(filter).sort(sort).lean();
+        // REQUIREMENT #12: Apply CSV export limit from constants
+        let limit = constants.CSV_EXPORT_MAX_LIMIT;
+        let skip = 0;
 
+        // If pagination provided, respect it but cap at max
         if (req.query.page !== undefined || req.query.limit !== undefined) {
-            const page  = Math.max(1, parseInt(req.query.page  ?? "1",  10));
-            const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit ?? "100", 10)));
-            query = query.skip((page - 1) * limit).limit(limit);
+            const pagination = parseAndValidatePagination(
+                req.query.page,
+                req.query.limit,
+                constants.CSV_EXPORT_MAX_LIMIT
+            );
+            skip = (pagination.page - 1) * pagination.limit;
+            limit = pagination.limit;
         }
 
-        const transactions = await query;
+        // Count total matching documents before streaming
+        const count = await transactionModel.countDocuments(filter);
 
-        // Set response headers for CSV download.
-        const filename = `transactions_${Date.now()}.csv`;
-        res.setHeader("Content-Type", "text/csv");
-        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        // REQUIREMENT #8: Generate collision-resistant filename using crypto.randomBytes
+        // Pattern: transactions_TIMESTAMP_HEX.csv
+        const randomHex = crypto.randomBytes(4).toString('hex');
+        const filename = `transactions_${Date.now()}_${randomHex}.csv`;
 
-        // CRITICAL: Pipe AFTER error handlers are attached.
+        // Set response headers for CSV download
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // REQUIREMENT #8: Pipe stream AFTER all error handlers attached
         csvStream.pipe(res);
 
-        for (const txn of transactions) {
-            csvStream.write({
-                _id:            txn._id.toString(),
-                fromAccount:    txn.fromAccount?.toString() ?? "",
-                toAccount:      txn.toAccount?.toString() ?? "",
-                amount:         txn.amount,
-                status:         txn.status,
-                idempotencyKey: txn.idempotencyKey,
-                createdAt:      txn.createdAt?.toISOString() ?? "",
-                updatedAt:      txn.updatedAt?.toISOString() ?? "",
-            });
-        }
+        // REQUIREMENT #7: Use cursor-based iteration for memory efficiency on large exports
+        const cursor = transactionModel
+            .find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit)
+            .cursor();
 
-        // CRITICAL: End the stream to signal completion and flush buffer.
-        csvStream.end();
-    } catch (err) {
-        console.error("[CSV Export] Error:", err.message);
-        // CRITICAL: Check if headers sent to avoid "Headers already sent" error.
-        if (!res.headersSent) {
-            // Return appropriate status based on error type.
-            const status = err.message && err.message.includes("Invalid") ? 400 : 500;
-            return res.status(status).json({ 
-                success: false, 
-                message: status === 400 ? err.message : "Internal server error." 
+        let rowCount = 0;
+        const maxRows = limit;
+
+        cursor.on('data', (doc) => {
+            if (rowCount >= maxRows) {
+                cursor.close();
+                csvStream.end();
+                return;
+            }
+
+            csvStream.write({
+                _id: doc._id.toString(),
+                fromAccount: doc.fromAccount?.toString() ?? '',
+                toAccount: doc.toAccount?.toString() ?? '',
+                amount: doc.amount,
+                status: doc.status,
+                idempotencyKey: doc.idempotencyKey,
+                createdAt: doc.createdAt?.toISOString() ?? '',
+                updatedAt: doc.updatedAt?.toISOString() ?? ''
             });
+
+            rowCount++;
+        });
+
+        cursor.on('error', (err) => {
+            console.error('[CSV Export] Cursor error:', err.message);
+            if (!res.headersSent) {
+                return errorResponse(res, 500, 'cursor_error', 'Failed to read transactions');
+            } else {
+                try {
+                    csvStream.destroy();
+                } catch (destroyErr) {
+                    console.error('[CSV Export] Error destroying stream on cursor error:', destroyErr.message);
+                }
+                res.destroy();
+            }
+        });
+
+        cursor.on('end', () => {
+            csvStream.end();
+        });
+
+    } catch (err) {
+        console.error('[CSV Export] Error:', err.message);
+
+        // REQUIREMENT #8: Check if headers sent before responding
+        if (!res.headersSent) {
+            if (err.message && err.message.includes('Invalid')) {
+                return errorResponse(res, 400, 'invalid_request', err.message);
+            } else {
+                return errorResponse(res, 500, 'export_failed', 'CSV export failed');
+            }
         } else {
-            // Headers already sent; destroy stream and response to prevent hanging.
-            csvStream.destroy();
+            // Headers already sent; destroy stream and response to prevent hanging
+            try {
+                csvStream.destroy();
+            } catch (destroyErr) {
+                console.error('[CSV Export] Error destroying stream:', destroyErr.message);
+            }
             res.destroy();
         }
     }
