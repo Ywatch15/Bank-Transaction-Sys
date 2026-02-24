@@ -27,11 +27,13 @@ export function useTransactions(initialFilters = {}) {
           ...filters,
         },
       });
-      setTransactions(Array.isArray(data.data) ? data.data : []);
+      // Backend returns { success, data: { transactions, meta } } via successResponse
+      const payload = data.data || data;
+      setTransactions(Array.isArray(payload.transactions) ? payload.transactions : (Array.isArray(payload) ? payload : []));
       setPagination({
-        page: data.page || page,
-        limit: data.limit || pagination.limit,
-        total: data.total || 0,
+        page: payload.meta?.page || page,
+        limit: payload.meta?.limit || pagination.limit,
+        total: payload.meta?.total || 0,
       });
       setError(null);
     } catch (err) {
@@ -68,20 +70,23 @@ export function useCreateTransfer() {
   const [error, setError] = useState(null);
   const { showToast } = useToast();
 
-  const execute = useCallback(async (fromAccountId, toAccountId, amount, note) => {
+  const execute = useCallback(async (fromAccountId, toAccountId, amount, _note) => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post('/api/transactions/transfer', {
-        fromAccountId,
-        toAccountId,
+      // Generate client-side idempotency key to prevent duplicate submissions
+      const idempotencyKey = `txn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      // TODO: Backend endpoint is POST /api/transactions (not /transfer), field names are fromAccount/toAccount
+      const { data } = await api.post('/api/transactions', {
+        fromAccount: fromAccountId,
+        toAccount: toAccountId,
         amount,
-        note,
+        idempotencyKey,
       });
       showToast('Transfer successful!', 'success');
       return data;
     } catch (err) {
-      const message = err.response?.data?.message || 'Transfer failed';
+      const message = err.response?.data?.error?.message || err.response?.data?.message || 'Transfer failed';
       setError(message);
       showToast(message, 'error');
       throw err;

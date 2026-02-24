@@ -39,7 +39,9 @@ export default function AccountDetail() {
       setAccount(balRes.data);
       const list = Array.isArray(acctRes.data) ? acctRes.data : (acctRes.data.accounts ?? []);
       setAllAccounts(list);
-      const txns = txnRes.data?.transactions ?? txnRes.data ?? [];
+      // Backend wraps in successResponse: { success, data: { transactions, meta } }
+      const txnPayload = txnRes.data?.data || txnRes.data;
+      const txns = txnPayload?.transactions ?? (Array.isArray(txnPayload) ? txnPayload : []);
       // Filter to this account
       setTransactions(txns.filter((t) =>
         String(t.fromAccount?._id ?? t.fromAccount) === accountId ||

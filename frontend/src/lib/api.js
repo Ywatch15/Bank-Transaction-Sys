@@ -120,13 +120,16 @@ export const fetchAccountDetailAPI = (accountId) =>
 export const fetchTransactionsAPI = (params = {}) =>
   api.get('/api/transactions', { params });
 
-export const createTransferAPI = (fromAccountId, toAccountId, amount, note) =>
-  api.post('/api/transactions/transfer', {
-    fromAccountId,
-    toAccountId,
+export const createTransferAPI = (fromAccount, toAccount, amount) => {
+  // Generate client-side idempotency key; backend requires fromAccount/toAccount field names
+  const idempotencyKey = `txn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return api.post('/api/transactions', {
+    fromAccount,
+    toAccount,
     amount,
-    note,
+    idempotencyKey,
   });
+};
 
 export const exportTransactionsAPI = (params = {}) =>
   api.get('/api/transactions/export', {

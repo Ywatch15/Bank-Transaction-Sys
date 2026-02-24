@@ -39,6 +39,8 @@ export default function TransferForm({ accounts = [], defaultFromId = '', onSucc
     if (form.fromAccount === form.toAccount) e.toAccount = 'Source and destination cannot be the same.';
     const amt = parseFloat(form.amount);
     if (!form.amount || isNaN(amt) || amt <= 0) e.amount = 'Enter a positive amount.';
+    // Enforce max 2 decimal places client-side to match backend validation
+    else if (form.amount.includes('.') && form.amount.split('.')[1]?.length > 2) e.amount = 'Max 2 decimal places allowed.';
     return e;
   }
 
@@ -71,7 +73,8 @@ export default function TransferForm({ accounts = [], defaultFromId = '', onSucc
       onSuccess?.(data.transaction);
       onClose?.();
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data?.error || 'Transfer failed.';
+      // Handle both successResponse error format and legacy format
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.error || 'Transfer failed.';
       showToast(msg, 'error');
     } finally {
       setLoading(false);

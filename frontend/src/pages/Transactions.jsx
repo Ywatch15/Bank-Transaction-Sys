@@ -53,8 +53,10 @@ export default function Transactions() {
       params.limit = filters.limit;
 
       const { data } = await api.get(API_ROUTES.transactions, { params });
-      setTransactions(data.transactions ?? data ?? []);
-      setTotal(data.total ?? data.length ?? 0);
+      // Backend wraps in successResponse: { success, data: { transactions, meta } }
+      const payload = data.data || data;
+      setTransactions(payload.transactions ?? (Array.isArray(payload) ? payload : []));
+      setTotal(payload.meta?.total ?? payload.total ?? 0);
     } catch {
       showToast('Could not load transactions.', 'error');
     } finally {

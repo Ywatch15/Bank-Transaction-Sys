@@ -28,6 +28,21 @@ function TransferModal({
       alert('Please fill in all fields');
       return;
     }
+    // Client-side validation: positive number, max 2 decimals
+    const parsed = parseFloat(amount);
+    if (isNaN(parsed) || parsed <= 0) {
+      alert('Amount must be a positive number');
+      return;
+    }
+    if (amount.includes('.') && amount.split('.')[1]?.length > 2) {
+      alert('Amount allows max 2 decimal places');
+      return;
+    }
+    // Prevent same-account transfer
+    if (toAccountId === fromAccount?._id) {
+      alert('Source and destination accounts must be different');
+      return;
+    }
     setStep('confirm');
   };
 
