@@ -21,11 +21,17 @@ function validatePositiveAmount(value) {
     throw new Error(`Invalid amount "${num}": must be a finite number`);
   }
   
+  // Enforce max 2 decimal places to avoid floating-point rounding in ledger
+  const parts = String(value).split('.');
+  if (parts[1] && parts[1].length > 2) {
+    throw new Error(`Invalid amount "${value}": max 2 decimal places allowed`);
+  }
+  
   if (num > constants.MAX_TRANSACTION_AMOUNT) {
     throw new Error(`Invalid amount "${num}": exceeds maximum allowed amount`);
   }
   
-  return num;
+  return Math.round(num * 100) / 100; // Normalize to 2 decimal places
 }
 
 /**
