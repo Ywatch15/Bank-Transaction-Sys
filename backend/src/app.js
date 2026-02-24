@@ -7,6 +7,17 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
+// ── CORS — allow frontend origin in production; Vite proxy handles dev ──
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', CORS_ORIGIN);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // ── Audit logging — runs on every request ─────────────────────
 // Placed after body-parsing so req.body is available for meta extraction.
 app.use(auditLogMiddleware);
