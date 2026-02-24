@@ -64,6 +64,11 @@ async function createTransaction(req, res) {
         return errorResponse(res, 400, 'invalid_account_id', 'Invalid account ID format.');
     }
 
+    // Prevent same-account transfers — always invalid for debit/credit ledger logic
+    if (fromAccount === toAccount) {
+        return errorResponse(res, 400, 'same_account_transfer', 'Source and destination accounts must be different.');
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Step 2: Check Idempotency Key (before session to avoid unnecessary work)
     // ─────────────────────────────────────────────────────────────────────────
@@ -211,6 +216,15 @@ async function createTransaction(req, res) {
         }
 
         console.error(`[Transaction] Error creating transaction for idempotency key ${idempotencyKey}:`, error.message);
+
+        // Handle MongoDB duplicate key error on idempotencyKey (concurrent request race)
+        if (error.code === 11000 && error.keyPattern?.idempotencyKey) {
+            const existing = await transactionModel.findOne({ idempotencyKey });
+            if (existing?.status === 'COMPLETED') {
+                return successResponse(res, { transaction: existing }, 200);
+            }
+            return errorResponse(res, 409, 'idempotency_conflict', 'Concurrent request detected. Use a new idempotency key or retry.', { idempotencyKey });
+        }
 
         // REQUIREMENT #2: Mark transaction as FAILED if it was created but failed later
         if (transaction && transaction._id) {
