@@ -239,6 +239,15 @@ async function createTransaction(req, res) {
             }
         }
 
+        // Send failure notification to user + admin (non-blocking)
+        try {
+            await emailService.sendTransactionFailureEmail(
+                req.user.email, req.user.name, validAmount, toAccount
+            );
+        } catch (emailErr) {
+            console.warn(`[Email] Failure notification failed:`, emailErr.message);
+        }
+
         // Determine appropriate error code and message
         if (error.message.includes('Insufficient funds')) {
             return errorResponse(res, 400, 'insufficient_funds', error.message);
