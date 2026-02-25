@@ -14,23 +14,29 @@
  *   - The Canvas (and Three.js bundle) is lazy-loaded; excluded from initial chunk.
  *   - On mobile (<768px) the 3D scene is replaced with the static fallback.
  */
-import React, { useRef, useState, useEffect, Suspense, lazy } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import React, { useRef, useState, useEffect, Suspense, lazy } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Link } from "react-router-dom";
 
 // ── Lazy-import heavy 3D deps so they are code-split ────────
-const Scene3D = lazy(() => import('./Scene3DInner.jsx'));
+const Scene3D = lazy(() => import("./Scene3DInner.jsx"));
 
 // Whether animations are globally disabled by env var
-const ANIMATIONS_DISABLED = import.meta.env.VITE_DISABLE_ANIMATIONS === 'true';
+const ANIMATIONS_DISABLED = import.meta.env.VITE_DISABLE_ANIMATIONS === "true";
 
 /** Static gradient fallback shown when 3D is disabled / not supported */
 function StaticHero({ children }) {
   return (
     <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 via-gray-900 to-gray-950">
       {/* Decorative circles */}
-      <div className="absolute -left-16 -top-16 h-64 w-64 rounded-full bg-brand-800/30 blur-3xl" aria-hidden />
-      <div className="absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-brand-600/20 blur-3xl" aria-hidden />
+      <div
+        className="absolute -left-16 -top-16 h-64 w-64 rounded-full bg-brand-800/30 blur-3xl"
+        aria-hidden
+      />
+      <div
+        className="absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-brand-600/20 blur-3xl"
+        aria-hidden
+      />
       {children}
     </div>
   );
@@ -46,7 +52,7 @@ function HeroOverlay({ user }) {
         transition={{ duration: 0.5 }}
         className="text-2xl font-bold text-white sm:text-3xl"
       >
-        Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
+        Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
       </motion.h1>
       <motion.p
         initial={{ opacity: 0 }}
@@ -62,8 +68,12 @@ function HeroOverlay({ user }) {
         transition={{ delay: 0.35, duration: 0.4 }}
         className="flex flex-wrap justify-center gap-3"
       >
-        <Link to="/transactions" className="btn-primary">View Transactions</Link>
-        <Link to="/profile" className="btn-secondary">My Profile</Link>
+        <Link to="/transactions" className="btn-primary">
+          View Transactions
+        </Link>
+        <Link to="/profile" className="btn-secondary">
+          My Profile
+        </Link>
       </motion.div>
     </div>
   );
@@ -74,10 +84,12 @@ export default function ThreeDParallaxHero({ user }) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    function check() { setIsMobile(window.innerWidth < 768); }
+    function check() {
+      setIsMobile(window.innerWidth < 768);
+    }
     check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   const disable3D = ANIMATIONS_DISABLED || prefersReduced || isMobile;

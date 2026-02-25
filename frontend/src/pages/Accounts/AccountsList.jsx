@@ -1,33 +1,19 @@
 /**
- * Dashboard.jsx — Main dashboard with accounts overview and recent transactions
- * Displays account cards, recent ledger, and quick transfer access.
+ * AccountsList.jsx — All user accounts overview
+ * Route: /accounts
  */
-import React, { useState, useEffect } from "react";
-import { useAccounts } from "../hooks/useAccounts";
-import { useTransactions } from "../hooks/useTransactions";
-import { useAuth } from "../hooks/useAuth";
-import AccountCard from "../components/AccountCard";
-import TransactionList from "../components/TransactionList";
-import TransferModal from "../components/TransferModal";
-import { formatCurrency } from "../lib/format";
+import React, { useState } from "react";
+import { useAccounts } from "../../hooks/useAccounts";
+import AccountCard from "../../components/AccountCard";
+import TransferModal from "../../components/TransferModal";
+import { formatCurrency } from "../../lib/format";
 import { motion } from "framer-motion";
 
-export default function Dashboard() {
-  const { user } = useAuth();
-  const { accounts, loading: accountsLoading } = useAccounts();
-  const {
-    transactions,
-    loading: transLoading,
-    fetch: fetchTransactions,
-  } = useTransactions();
+export default function AccountsList() {
+  const { accounts, loading } = useAccounts();
   const [transferOpen, setTransferOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [balanceVisible, setBalanceVisible] = useState(false);
-
-  // Load recent transactions on mount
-  useEffect(() => {
-    fetchTransactions({ limit: 10 }, 1);
-  }, []);
 
   const handleTransfer = (account) => {
     setSelectedAccount(account);
@@ -35,35 +21,34 @@ export default function Dashboard() {
   };
 
   const totalBalance = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
-  const frozenCount = accounts.filter((a) => a.isFrozen).length;
+  const activeCount = accounts.filter((a) => a.status === "ACTIVE").length;
+  const frozenCount = accounts.filter((a) => a.status === "FROZEN" || a.isFrozen).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-      {/* Welcome Section */}
+      {/* Page Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl font-bold text-white">
-          Welcome back, {user?.name}
-        </h1>
+        <h1 className="text-3xl font-bold text-white">Your Accounts</h1>
         <p className="text-gray-400 mt-1">
-          Manage your accounts and transactions
+          Manage and monitor all your bank accounts
         </p>
       </motion.div>
 
-      {/* Summary Cards */}
+      {/* Summary Strip */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="grid md:grid-cols-3 gap-4"
+        className="grid sm:grid-cols-3 gap-4"
       >
-        <div className="rounded-xl p-6 bg-gradient-to-br from-brand-800/80 to-brand-900/80 border border-brand-700/40">
+        <div className="rounded-xl p-5 bg-gradient-to-br from-brand-800/80 to-brand-900/80 border border-brand-700/40">
           <p className="text-xs font-medium text-brand-200 uppercase tracking-wide">
-            Total Balance
+            Combined Balance
           </p>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-1">
             <p className="text-2xl font-bold text-white">
               {balanceVisible ? formatCurrency(totalBalance) : "₹ ••••••"}
             </p>
@@ -88,21 +73,19 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-
-        <div className="rounded-xl p-6 border border-gray-800 bg-gray-900">
+        <div className="rounded-xl p-5 border border-gray-800 bg-gray-900">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-            Accounts
+            Active
           </p>
-          <p className="text-2xl font-bold text-white mt-2">
-            {accounts.length}
+          <p className="text-2xl font-bold text-emerald-400 mt-1">
+            {activeCount}
           </p>
         </div>
-
-        <div className="rounded-xl p-6 border border-gray-800 bg-gray-900">
+        <div className="rounded-xl p-5 border border-gray-800 bg-gray-900">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-            Frozen Accounts
+            Frozen
           </p>
-          <p className="text-2xl font-bold text-debit-400 mt-2">
+          <p className="text-2xl font-bold text-red-400 mt-1">
             {frozenCount}
           </p>
         </div>
@@ -114,56 +97,31 @@ export default function Dashboard() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
       >
-        <h2 className="text-xl font-semibold text-white mb-4">
-          Your Accounts
-        </h2>
-        {accountsLoading ? (
-          <div className="flex items-center justify-center py-12">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
           </div>
         ) : accounts.length === 0 ? (
-          <div className="text-center py-12 bg-gray-900 rounded-xl border border-gray-800">
-            <p className="text-gray-500">No accounts yet</p>
+          <div className="text-center py-16 bg-gray-900 rounded-xl border border-gray-800">
+            <p className="text-5xl mb-3">🏦</p>
+            <p className="text-gray-400 text-lg font-medium">No accounts yet</p>
+            <p className="text-gray-500 text-sm mt-1">
+              Your accounts will appear here once created
+            </p>
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {accounts.map((account) => (
-              <AccountCard
+            {accounts.map((account, idx) => (
+              <motion.div
                 key={account._id}
-                account={account}
-                onTransfer={handleTransfer}
-              />
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * idx }}
+              >
+                <AccountCard account={account} onTransfer={handleTransfer} />
+              </motion.div>
             ))}
           </div>
-        )}
-      </motion.section>
-
-      {/* Recent Transactions */}
-      <motion.section
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-white">
-            Recent Transactions
-          </h2>
-          <a
-            href="/transactions"
-            className="text-sm text-brand-400 hover:text-brand-300 font-medium"
-          >
-            View All →
-          </a>
-        </div>
-        {transLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-          </div>
-        ) : (
-          <TransactionList
-            transactions={transactions}
-            userAccountIds={new Set(accounts.map((a) => String(a._id)))}
-          />
         )}
       </motion.section>
 
@@ -178,8 +136,8 @@ export default function Dashboard() {
           fromAccount={selectedAccount}
           accounts={accounts}
           onSuccess={() => {
-            // Refresh accounts and transactions
-            fetchTransactions({ limit: 10 }, 1);
+            setTransferOpen(false);
+            setSelectedAccount(null);
           }}
         />
       )}

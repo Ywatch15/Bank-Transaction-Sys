@@ -7,9 +7,9 @@
  * Scene: a softly illuminated floating torus knot + sphere that
  * rotate slowly and tilt toward the user's mouse pointer.
  */
-import React, { useRef } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Float, Stars } from '@react-three/drei';
+import React, { useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Float, Stars } from "@react-three/drei";
 
 /** Floating geometry that responds to pointer position */
 function FloatingMesh() {
@@ -22,7 +22,7 @@ function FloatingMesh() {
     meshRef.current.rotation.y = clock.getElapsedTime() * 0.25;
     // Subtle parallax tilt toward pointer
     meshRef.current.rotation.x = pointer.y * 0.18;
-    meshRef.current.rotation.z = -pointer.x * 0.10;
+    meshRef.current.rotation.z = -pointer.x * 0.1;
   });
 
   return (
@@ -48,7 +48,7 @@ export default function Scene3D() {
       aria-label="Decorative 3D parallax animation"
       camera={{ position: [0, 0, 5], fov: 50 }}
       gl={{ antialias: true, alpha: true }}
-      style={{ position: 'absolute', inset: 0 }}
+      style={{ position: "absolute", inset: 0 }}
     >
       {/* Lighting */}
       <ambientLight intensity={0.3} />
@@ -56,7 +56,15 @@ export default function Scene3D() {
       <pointLight position={[-4, -4, 2]} intensity={0.8} color="#818cf8" />
 
       {/* Background stars (drei) */}
-      <Stars radius={80} depth={50} count={800} factor={3} saturation={0} fade speed={0.5} />
+      <Stars
+        radius={80}
+        depth={50}
+        count={800}
+        factor={3}
+        saturation={0}
+        fade
+        speed={0.5}
+      />
 
       {/* Scene geometry */}
       <FloatingMesh />

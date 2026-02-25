@@ -1,80 +1,154 @@
 /**
- * api.js — Axios instance for all backend calls
- * -----------------------------------------------
- * Important notes:
+ * api.js — Axios instance and API endpoint helpers
+ * -------------------------------------------------
+ * Configuration & endpoint abstraction layer for backend integration.
  *
- * 1. BASE URL: Reads VITE_API_BASE_URL from env.
- *    In dev, the Vite proxy (vite.config.js) forwards /api/* calls to the
- *    backend, so baseURL can be empty string ''. Set VITE_API_BASE_URL fully
- *    only when not using the proxy (e.g. staging builds).
+ * ENV VARIABLES (set in .env or .env.local):
+ *   - VITE_API_BASE_URL: Backend base URL (default: '' — uses Vite proxy in dev)
+ *   - VITE_USE_COOKIE_AUTH: Set to 'true' if backend uses httpOnly cookies
  *
- * 2. TOKEN ATTACHMENT: We pull the JWT from localStorage (fallback strategy).
- *    If the backend switches to httpOnly cookies, remove the interceptor below
- *    and keep `withCredentials: true` so the browser sends the cookie automatically.
+ * ENDPOINT NOTES:
+ *   Backend endpoints:
+ *     - /api/auth/login, /api/auth/register, /api/auth/logout
+ *     - /api/profile (GET, PATCH)
+ *     - /api/account (GET)
+ *     - /api/account/:id (GET)
+ *     - /api/transactions (GET)
+ *     - /api/transactions/transfer (POST)
+ *     - /api/transactions/export (GET, blob)
+ *     - /api/admin/accounts (GET)
+ *     - /api/admin/accounts/:id/freeze (POST)
+ *     - /api/admin/accounts/:id/unfreeze (POST)
  *
- * 3. 401 HANDLING: Any 401 response triggers a client-side logout and redirect.
- *
- * NOTE ON ENDPOINT NAMES:
- *   The backend uses /api/account (singular) for accounts,
- *   and /api/profile for user profile.
- *   Adjust API_ROUTES constants below if the backend changes.
+ *   If your backend uses different paths, update the endpoint strings below.
  */
-import axios from 'axios';
-import { getToken, clearToken } from './auth.js';
-
-// ── Configurable endpoint names ──────────────────────────────
-// Change these constants if the backend renames routes.
-export const API_ROUTES = {
-  login:           '/api/auth/login',
-  register:        '/api/auth/register',
-  logout:          '/api/auth/logout',
-  profile:         '/api/profile',          // GET + PATCH
-  accounts:        '/api/account',          // Note: backend uses singular
-  accountBalance:  '/api/account/balance',  // + /:accountId
-  transactions:    '/api/transactions',
-  transactionExport: '/api/transactions/export',
-  adminFreeze:     '/api/admin/accounts',   // + /:id/freeze | /unfreeze
-};
+import axios from "axios";
+import { getToken, clearToken } from "./auth.js";
 
 const api = axios.create({
-  /**
-   * When using the Vite dev proxy, leave baseURL as '' so requests go to
-   * the same origin and the proxy picks them up.
-   * For production builds, set VITE_API_BASE_URL to the full backend URL.
-   */
-  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  // Vite proxy forwards /api/* to backend in dev; use baseURL for prod
+  baseURL: import.meta.env.VITE_API_BASE_URL || "",
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
-  /**
-   * Set withCredentials: true to send httpOnly cookies with each request.
-   * Safe to leave enabled even when using localStorage tokens.
-   */
-  withCredentials: true,
+  headers: { "Content-Type": "application/json" },
+  // Enable cookie-based auth if configured
+  withCredentials: import.meta.env.VITE_USE_COOKIE_AUTH === "true",
 });
 
-// ── Request interceptor — attach JWT ─────────────────────────
+// ── Request interceptor: attach JWT token if using header-based auth
 api.interceptors.request.use((config) => {
-  const token = getToken();
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
+  if (import.meta.env.VITE_USE_COOKIE_AUTH !== "true") {
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
   return config;
 });
 
-// ── Response interceptor — handle 401 globally ───────────────
+// ── Response interceptor: handle 401 (token expired/invalid)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid — clear local state and redirect to login.
-      // We avoid importing AuthContext here to prevent circular deps.
       clearToken();
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
+
+// ────── API ROUTE CONSTANTS ──────────────────────────────────
+// Centralized endpoint paths for consistency and easy updates
+
+export const API_ROUTES = {
+  // Auth
+  login: "/api/auth/login",
+  register: "/api/auth/register",
+  logout: "/api/auth/logout",
+
+  // Profile
+  profile: "/api/profile",
+
+  // Accounts
+  accounts: "/api/account",
+  accountDetail: "/api/account",
+  accountBalance: "/api/account/balance",
+
+  // Transactions
+  transactions: "/api/transactions",
+  transactionExport: "/api/transactions/export",
+
+  // Admin
+  adminAccounts: "/api/admin/accounts",
+};
+
+// ────── API ENDPOINT HELPERS ──────────────────────────────────
+
+// AUTH
+export const loginAPI = (email, password) =>
+  api.post("/api/auth/login", { email, password });
+
+export const registerAPI = (
+  name,
+  email,
+  password,
+  phoneNumber,
+  address,
+  dateOfBirth,
+) =>
+  api.post("/api/auth/register", {
+    name,
+    email,
+    password,
+    phoneNumber,
+    address,
+    dateOfBirth,
+  });
+
+export const logoutAPI = () => api.post("/api/auth/logout");
+
+// USER PROFILE
+export const fetchProfileAPI = () => api.get("/api/profile");
+
+export const updateProfileAPI = (updates) => api.patch("/api/profile", updates);
+
+// ACCOUNTS
+export const fetchAccountsAPI = () => api.get("/api/account");
+
+export const fetchAccountDetailAPI = (accountId) =>
+  api.get(`/api/account/${accountId}`);
+
+// TRANSACTIONS
+export const fetchTransactionsAPI = (params = {}) =>
+  api.get("/api/transactions", { params });
+
+export const createTransferAPI = (fromAccount, toAccount, amount) => {
+  // Generate client-side idempotency key; backend requires fromAccount/toAccount field names
+  const idempotencyKey = `txn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return api.post("/api/transactions", {
+    fromAccount,
+    toAccount,
+    amount,
+    idempotencyKey,
+  });
+};
+
+export const exportTransactionsAPI = (params = {}) =>
+  api.get("/api/transactions/export", {
+    params,
+    responseType: "blob",
+  });
+
+// ADMIN
+export const fetchAdminAccountsAPI = (params = {}) =>
+  api.get("/api/admin/accounts", { params });
+
+export const freezeAccountAPI = (accountId) =>
+  api.post(`/api/admin/accounts/${accountId}/freeze`, {});
+
+export const unfreezeAccountAPI = (accountId) =>
+  api.post(`/api/admin/accounts/${accountId}/unfreeze`, {});

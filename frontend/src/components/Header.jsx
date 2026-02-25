@@ -1,13 +1,13 @@
 /**
- * Header.jsx — Top navigation bar
- * Shows brand logo, user avatar + name, balance hint, and mobile menu toggle.
+ * Header.jsx — Professional banking header
+ * Shows logo, navigation, user menu, and balance snapshot.
  */
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import { isAdmin } from '../lib/auth.js';
-import clsx from 'clsx';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { isAdmin } from "../lib/auth";
+import { motion } from "framer-motion";
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -15,117 +15,100 @@ export default function Header() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     await logout();
-    showToast('Logged out successfully.', 'success');
-    navigate('/login');
-  }
+    showToast("Logged out successfully", "success");
+    navigate("/login");
+  };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-800 bg-gray-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        {/* Brand */}
-        <Link to="/dashboard" className="flex items-center gap-2 font-bold text-white">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-xs font-extrabold text-white">B</span>
-          <span className="hidden sm:block">BankSys</span>
+    <header className="sticky top-0 z-40 border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-lg">
+      <nav className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        {/* Logo */}
+        <Link to="/dashboard" className="flex items-center gap-2.5 font-bold shrink-0">
+          <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
+            B
+          </div>
+          <span className="hidden sm:inline text-lg font-bold text-white tracking-tight">BankSys</span>
         </Link>
 
-        {/* Desktop nav */}
-        {user && (
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
-            <NavLink to="/dashboard">Dashboard</NavLink>
-            <NavLink to="/transactions">Transactions</NavLink>
-            <NavLink to="/profile">Profile</NavLink>
-            {isAdmin(user) && (
-              <NavLink to="/admin" className="text-yellow-400 hover:text-yellow-300">Admin</NavLink>
-            )}
-          </nav>
-        )}
-
-        {/* Right side */}
-        <div className="flex items-center gap-3">
-          {user ? (
-            <>
-              <span className="hidden text-sm text-gray-400 md:block">
-                {user.name}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="btn-secondary py-1.5 text-xs"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <Link to="/login" className="btn-primary py-1.5 text-xs">Login</Link>
-          )}
-
-          {/* Mobile hamburger */}
-          {user && (
-            <button
-              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
-              className="flex h-8 w-8 flex-col items-center justify-center gap-1.5 rounded-lg border border-gray-700 md:hidden"
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center gap-1 bg-gray-800/60 rounded-lg px-1 py-1">
+          <Link
+            to="/dashboard"
+            className="text-sm text-gray-300 hover:text-white hover:bg-gray-700 font-medium transition-colors px-3 py-1.5 rounded-md"
+          >
+            Dashboard
+          </Link>
+          <Link
+            to="/accounts"
+            className="text-sm text-gray-300 hover:text-white hover:bg-gray-700 font-medium transition-colors px-3 py-1.5 rounded-md"
+          >
+            Accounts
+          </Link>
+          <Link
+            to="/transactions"
+            className="text-sm text-gray-300 hover:text-white hover:bg-gray-700 font-medium transition-colors px-3 py-1.5 rounded-md"
+          >
+            Transactions
+          </Link>
+          {isAdmin(user) && (
+            <Link
+              to="/admin"
+              className="text-sm text-gray-300 hover:text-white hover:bg-gray-700 font-medium transition-colors px-3 py-1.5 rounded-md"
             >
-              <span className={clsx('h-0.5 w-5 bg-gray-300 transition-all', menuOpen && 'translate-y-2 rotate-45')} />
-              <span className={clsx('h-0.5 w-5 bg-gray-300 transition-all', menuOpen && 'opacity-0')} />
-              <span className={clsx('h-0.5 w-5 bg-gray-300 transition-all', menuOpen && '-translate-y-2 -rotate-45')} />
-            </button>
+              Admin
+            </Link>
           )}
         </div>
-      </div>
 
-      {/* Mobile nav (inline below header) */}
-      {user && menuOpen && (
-        <nav className="border-t border-gray-800 bg-gray-950 px-4 pb-4 md:hidden" aria-label="Mobile navigation">
-          <MobileLinks onClose={() => setMenuOpen(false)} user={user} onLogout={handleLogout} />
-        </nav>
-      )}
+        {/* User Menu */}
+        <div className="flex items-center gap-3 shrink-0">
+          {user && (
+            <div className="hidden sm:flex items-center max-w-xs gap-2">
+              <div className="text-right">
+                <p className="text-xs font-medium text-gray-200 truncate">
+                  {user.name}
+                </p>
+                <p className="text-xs text-gray-500">{user.email}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="w-9 h-9 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold text-sm hover:bg-brand-500 transition-colors ring-2 ring-brand-500/30"
+              title={user?.name}
+            >
+              {user?.name?.charAt(0).toUpperCase()}
+            </button>
+
+            {menuOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-2 z-50"
+              >
+                <Link
+                  to="/profile"
+                  onClick={() => setMenuOpen(false)}
+                  className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                >
+                  Profile Settings
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                >
+                  Logout
+                </button>
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </nav>
     </header>
-  );
-}
-
-function NavLink({ to, children, className }) {
-  return (
-    <Link
-      to={to}
-      className={clsx('rounded-lg px-3 py-1.5 text-sm font-medium text-gray-400 transition hover:bg-gray-800 hover:text-white', className)}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function MobileLinks({ onClose, user, onLogout }) {
-  const links = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/transactions', label: 'Transactions' },
-    { to: '/profile', label: 'Profile' },
-    ...(isAdmin(user) ? [{ to: '/admin', label: 'Admin' }] : []),
-  ];
-
-  return (
-    <ul className="mt-3 space-y-1">
-      {links.map((l) => (
-        <li key={l.to}>
-          <Link
-            to={l.to}
-            onClick={onClose}
-            className="block rounded-lg px-3 py-2.5 text-sm font-medium text-gray-300 hover:bg-gray-800"
-          >
-            {l.label}
-          </Link>
-        </li>
-      ))}
-      <li>
-        <button
-          onClick={onLogout}
-          className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-400 hover:bg-gray-800"
-        >
-          Logout
-        </button>
-      </li>
-    </ul>
   );
 }

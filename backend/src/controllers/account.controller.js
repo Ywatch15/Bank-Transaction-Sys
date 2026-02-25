@@ -33,9 +33,13 @@ async function getAccountBalanceController(req,res){
         return res.status(404).json({ error: "Account not found." });
     }
     const balance = await account.getBalance();
+    // Return full account data so frontend can display status/currency
     res.status(200).json({
+        _id: account._id,
         accountId: account._id,
-        balance: balance
+        balance: balance,
+        status: account.status,
+        currency: account.currency
     })
 }
 

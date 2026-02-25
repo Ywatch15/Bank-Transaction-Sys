@@ -19,15 +19,22 @@
  * @param {string} filename  — Suggested download filename
  * @param {string} mimeType  — MIME type (default: text/csv)
  */
-export function downloadBlob(blob, filename = 'export.csv', mimeType = 'text/csv') {
-  const url = URL.createObjectURL(new Blob([blob], { type: mimeType }));
-  const anchor = document.createElement('a');
+export function downloadBlob(
+  blob,
+  filename = "export.csv",
+  mimeType = "text/csv",
+) {
+  // Ensure blob is a Blob object; wrap if string/data
+  const blobData =
+    blob instanceof Blob ? blob : new Blob([blob], { type: mimeType });
+  const url = URL.createObjectURL(blobData);
+  const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
-  // MUSt be in DOM for Firefox compatibility
+  // MUST be in DOM for Firefox compatibility
   document.body.appendChild(anchor);
   anchor.click();
-  // Clean up
+  // Clean up: remove anchor and revoke object URL
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
 }
@@ -36,7 +43,7 @@ export function downloadBlob(blob, filename = 'export.csv', mimeType = 'text/csv
  * Build a timestamped filename for CSV exports.
  * e.g. "transactions_2026-02-21.csv"
  */
-export function csvFilename(prefix = 'transactions') {
-  const today = new Date().toISOString().split('T')[0];
+export function csvFilename(prefix = "transactions") {
+  const today = new Date().toISOString().split("T")[0];
   return `${prefix}_${today}.csv`;
 }
