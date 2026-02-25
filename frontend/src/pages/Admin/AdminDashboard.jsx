@@ -28,9 +28,10 @@ export default function AdminDashboard() {
   async function fetchAccounts() {
     setLoading(true);
     try {
-      // Use the regular accounts route; admin middleware on the backend allows full list
-      const { data } = await api.get(API_ROUTES.accounts);
-      const list = Array.isArray(data) ? data : (data.accounts ?? []);
+      const { data } = await api.get(API_ROUTES.adminAccounts);
+      // Backend returns { success, data: { accounts } } via successResponse
+      const payload = data.data || data;
+      const list = Array.isArray(payload) ? payload : (payload.accounts ?? []);
       setAccounts(list);
     } catch (err) {
       showToast("Could not load accounts.", "error");
@@ -42,13 +43,13 @@ export default function AdminDashboard() {
   async function handleFreeze(accountId) {
     setActionId(accountId);
     try {
-      await api.patch(`${API_ROUTES.adminFreeze}/${accountId}/freeze`);
+      await api.post(`${API_ROUTES.adminAccounts}/${accountId}/freeze`);
       showToast("Account frozen.", "success");
       setAccounts((prev) =>
         prev.map((a) => (a._id === accountId ? { ...a, status: "FROZEN" } : a)),
       );
     } catch (err) {
-      showToast(err.response?.data?.message ?? "Action failed.", "error");
+      showToast(err.response?.data?.error?.message ?? err.response?.data?.message ?? "Action failed.", "error");
     } finally {
       setActionId(null);
     }
@@ -57,13 +58,13 @@ export default function AdminDashboard() {
   async function handleUnfreeze(accountId) {
     setActionId(accountId);
     try {
-      await api.patch(`${API_ROUTES.adminFreeze}/${accountId}/unfreeze`);
+      await api.post(`${API_ROUTES.adminAccounts}/${accountId}/unfreeze`);
       showToast("Account unfrozen.", "success");
       setAccounts((prev) =>
         prev.map((a) => (a._id === accountId ? { ...a, status: "ACTIVE" } : a)),
       );
     } catch (err) {
-      showToast(err.response?.data?.message ?? "Action failed.", "error");
+      showToast(err.response?.data?.error?.message ?? err.response?.data?.message ?? "Action failed.", "error");
     } finally {
       setActionId(null);
     }

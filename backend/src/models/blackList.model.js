@@ -12,7 +12,7 @@ const tokenBlacklistSchema = new mongoose.Schema({
 
 
 tokenBlacklistSchema.index({createdAt:1},{
-    expiredAfterSeconds: 60*60*24*3 // TTL is for 3 days
+    expireAfterSeconds: 60*60*24*3 // TTL is for 3 days
 })
 
 

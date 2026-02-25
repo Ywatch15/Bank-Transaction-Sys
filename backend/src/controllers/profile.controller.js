@@ -42,7 +42,14 @@ async function updateProfileController(req, res) {
 
     for (const field of allowedUpdates) {
       if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
+        // Flatten address if sent as object: { street, city, country } → "street, city, country"
+        if (field === "address" && typeof req.body[field] === "object" && req.body[field] !== null) {
+          const { street, city, country } = req.body[field];
+          const parts = [street, city, country].filter(Boolean);
+          updates[field] = parts.length > 0 ? parts.join(", ") : null;
+        } else {
+          updates[field] = req.body[field];
+        }
       }
     }
 

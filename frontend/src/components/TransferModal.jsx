@@ -127,13 +127,17 @@ function TransferModal({
                           <button
                             type="button"
                             onClick={() => {
-                              setInputMode((m) => m === "select" ? "manual" : "select");
+                              setInputMode((m) =>
+                                m === "select" ? "manual" : "select",
+                              );
                               setToAccountId("");
                               setManualId("");
                             }}
                             className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
                           >
-                            {inputMode === "select" ? "Enter ID manually" : "Select from my accounts"}
+                            {inputMode === "select"
+                              ? "Enter ID manually"
+                              : "Select from my accounts"}
                           </button>
                         </div>
 
@@ -261,14 +265,12 @@ function TransferModal({
                       <div className="border-t border-gray-700 pt-3 flex justify-between text-sm font-semibold">
                         <span className="text-gray-300">Amount:</span>
                         <span className="text-brand-400">
-                          {formatCurrency(amount)}
+                          {formatCurrency(parseFloat(amount))}
                         </span>
                       </div>
                       {note && (
                         <div className="border-t border-gray-700 pt-3">
-                          <span className="text-xs text-gray-400">
-                            Note:{" "}
-                          </span>
+                          <span className="text-xs text-gray-400">Note: </span>
                           <p className="text-sm text-gray-300">{note}</p>
                         </div>
                       )}

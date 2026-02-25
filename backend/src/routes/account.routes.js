@@ -23,4 +23,12 @@ router.get("/", authMiddleware.authMiddleware, accountController.getUserAccounts
  */
 router.get("/balance/:accountId", authMiddleware.authMiddleware, accountController.getAccountBalanceController)
 
+/**
+ * - GET /api/accounts/:accountId
+ * - Get a single account by ID (must belong to authenticated user).
+ * - Protected route
+ * NOTE: Must be AFTER /balance/:accountId to avoid route shadowing.
+ */
+router.get("/:accountId", authMiddleware.authMiddleware, accountController.getAccountDetailController)
+
 module.exports = router;

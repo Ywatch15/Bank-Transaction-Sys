@@ -1,6 +1,6 @@
-# Bank Transaction System
+# 🏦 Bank Transaction System
 
-A robust, production-ready **full-stack** banking application: a Node.js/Express REST API backend paired with a React + Vite + Tailwind frontend — featuring secure authentication, real-time transaction management, CSV export, admin controls, and professional banking UI.
+A **production-ready full-stack** banking application built with **Node.js · Express · MongoDB** on the backend and **React 18 · Vite 5 · Tailwind CSS** on the frontend. Features secure JWT authentication, real-time fund transfers, double-entry ledger accounting, admin controls, email notifications, CSV export, and a professional dark-themed banking UI.
 
 ---
 
@@ -14,68 +14,70 @@ A robust, production-ready **full-stack** banking application: a Node.js/Express
 - [Installation & Setup](#installation--setup)
 - [Environment Configuration](#environment-configuration)
 - [API Endpoints](#api-endpoints)
-  - [Authentication](#authentication-routes-apiauth)
-  - [Profile](#profile-routes-apiprofile)
-  - [Account](#account-routes-apiaccount)
-  - [Transactions](#transaction-routes-apitransactions)
-  - [Admin](#admin-routes-apiadmin)
 - [Database Schema](#database-schema)
-- [How It Works](#how-it-works)
-- [Key Components](#key-components)
-- [Error Handling](#error-handling)
+- [Frontend Pages & Components](#frontend-pages--components)
+- [Security](#security)
 - [Development & Deployment](#development--deployment)
 
 ---
 
 ## 🎯 Overview
 
-The **Bank Transaction System** is a Node.js/Express backend API designed to manage:
-- **User Authentication**: Secure registration, login, and logout with JWT tokens
-- **User Profiles**: Extended profile fields (phone, address, date of birth) with validated update endpoint
-- **Account Management**: Create and manage multiple accounts per user with different currencies
-- **Transactions**: Transfer funds between accounts with ledger-based balance tracking
-- **Transaction History**: Paginated, filterable history with CSV export
-- **Admin Controls**: Freeze/unfreeze accounts to block transfers
-- **Security**: Token blacklisting, password hashing, rate limiting, middleware-based authorization
-- **Audit Logging**: Every request is recorded to a dedicated `audit_logs` collection
-- **Notifications**: Email alerts for transaction completions (disabled safely in dev via env flag)
+The **Bank Transaction System** is a professional banking platform that manages:
 
-This system uses a **double-entry ledger accounting model** to ensure financial accuracy and auditability of all transactions.
+- **User Authentication** — Secure registration, login, and logout with JWT + httpOnly cookies
+- **User Profiles** — Extended profile fields (phone, address, date of birth) with validated updates
+- **Multi-Account Management** — Create and manage multiple accounts per user with INR currency
+- **Fund Transfers** — Atomic transfers between accounts with double-entry ledger tracking
+- **Transaction History** — Paginated, filterable history with date range, type, amount range, and sorting
+- **CSV Export** — Stream filtered transactions to a downloadable `.csv` file
+- **Admin Controls** — Freeze / unfreeze accounts to block transfers instantly
+- **Email Notifications** — Transaction confirmations & admin alerts via SMTP (OAuth2 supported)
+- **Audit Logging** — Every request recorded to a dedicated `audit_logs` collection
+- **Idempotency** — Duplicate submissions safely return the original response
+
+The system uses a **double-entry ledger accounting model** ensuring financial accuracy and full auditability.
 
 ---
 
 ## ✨ Features
 
 ### Core Features
-- ✅ **User Registration & Authentication** - Secure JWT-based authentication with bcrypt password hashing
-- ✅ **User Profile Management** - Extended profile (phoneNumber, address, dateOfBirth) with validated PATCH endpoint
-- ✅ **Multi-Account Support** - Users can create and manage multiple accounts in different currencies
-- ✅ **Fund Transfers** - Transfer money between accounts with balance validation
-- ✅ **Transaction History** - Paginated, filterable history (date range, type, amount range, sorting)
-- ✅ **CSV Export** - Stream filtered transactions to a downloadable `.csv` file
-- ✅ **Ledger System** - Every transaction creates immutable DEBIT/CREDIT entries for audit trails
-- ✅ **Idempotency** - Duplicate requests with same idempotency key return cached responses
-- ✅ **Token Blacklisting** - Logout invalidates tokens permanently
-- ✅ **Email Notifications** - Transaction confirmations sent via SMTP; suppressed in dev with `DISABLE_EMAILS=true`
-- ✅ **MongoDB Transactions** - ACID compliance with atomic operations
-- ✅ **Audit Logging** - Every request persisted to `audit_logs` collection (no secrets stored)
-- ✅ **Admin Controls** - Freeze / unfreeze accounts to block transfers instantly
-- ✅ **Input Validation** - `express-validator` on all write endpoints
+
+| Feature | Description |
+|---------|-------------|
+| **JWT Authentication** | Register, login, logout with bcrypt hashing and token blacklisting |
+| **Multi-Account** | Users can create multiple accounts; each gets ₹4,000 initial funding |
+| **Fund Transfers** | Atomic transfers via MongoDB sessions with balance validation |
+| **Ledger System** | Immutable DEBIT/CREDIT entries for every transaction |
+| **Transaction History** | Paginated list with filters: date range, type, amount range, sort order |
+| **Amount Filter Auto-Swap** | If minAmount > maxAmount, values are auto-swapped instead of erroring |
+| **CSV Export** | Download filtered transactions as `.csv` |
+| **Idempotency Keys** | Client-generated keys prevent duplicate transfers |
+| **Email Notifications** | Success/failure emails to sender + admin alerts for large transfers |
+| **Admin Dashboard** | Freeze/unfreeze accounts, view all accounts across users |
+| **Profile Management** | Update name, phone, address (supports object or string), date of birth |
+| **Audit Logging** | Non-blocking `res.on('finish')` middleware logs every request |
+| **Error Boundary** | React error boundary prevents white-screen crashes |
 
 ### Security Features
-- 🔐 Password hashing with bcrypt
-- 🔐 JWT token-based authentication
-- 🔐 Token blacklist on logout
-- 🔐 Protected middleware for authorized routes
-- 🔐 Admin-only middleware (`authAdminMiddleware`) for privileged operations
-- 🔐 Rate limiting on auth routes (20 req / 15 min) and transfer route (30 req / 15 min), configurable via env
-- 🔐 Immutable ledger entries (cannot be modified/deleted)
-- 🔐 Account status validation (only ACTIVE accounts can transact)
-- 🔐 Audit log captures userId, IP, route, method — never passwords or raw tokens
+
+- 🔐 **Password hashing** with bcrypt (10 salt rounds)
+- 🔐 **JWT tokens** with `isAdmin` claim for role-based access
+- 🔐 **Secure cookies** — httpOnly, secure in production, SameSite strict
+- 🔐 **Token blacklist** — Logout invalidates tokens permanently (MongoDB TTL auto-cleanup)
+- 🔐 **Rate limiting** — Auth routes (20 req/15 min), Transfer routes (30 req/15 min)
+- 🔐 **Admin middleware** — Separate `authAdminMiddleware` for privileged operations
+- 🔐 **Immutable ledger** — Ledger entries cannot be modified or deleted
+- 🔐 **Account status checks** — Only ACTIVE accounts can send/receive transfers
+- 🔐 **Audit trail** — Captures userId, IP, route, method (never passwords/tokens)
+- 🔐 **Auth null-check** — Returns 401 if JWT user no longer exists in database
 
 ---
 
 ## 🛠 Tech Stack
+
+### Backend
 
 | Technology | Purpose |
 |------------|---------|
@@ -83,111 +85,123 @@ This system uses a **double-entry ledger accounting model** to ensure financial 
 | **Express.js** | Web framework & routing |
 | **MongoDB** | NoSQL database |
 | **Mongoose** | ODM for MongoDB |
-| **JWT** | Token-based authentication |
+| **JWT (jsonwebtoken)** | Token-based authentication with `isAdmin` claim |
 | **bcrypt** | Password hashing |
-| **Nodemailer** | Email service (SMTP) |
-| **express-validator** | Request body / query validation |
+| **Nodemailer** | Email service (SMTP / OAuth2) |
+| **express-validator** | Input validation |
 | **express-rate-limit** | IP-based rate limiting |
 | **fast-csv** | CSV streaming / export |
-| **Dotenv** | Environment variable management |
-| **Cookie-Parser** | Cookie parsing middleware |
+| **cookie-parser** | Cookie parsing middleware |
+| **cors** | Cross-origin resource sharing |
 
-**Dev Dependencies:**
-- Nodemon (auto-reload on file changes)
+### Frontend
+
+| Technology | Purpose |
+|------------|---------|
+| **React 18** | UI framework |
+| **Vite 5** | Build tool & dev server |
+| **Tailwind CSS 3** | Utility-first styling (dark theme) |
+| **React Router v6** | Client-side routing |
+| **Axios** | HTTP client with interceptors |
+| **Framer Motion** | Animations & transitions |
+| **Headless UI v2** | Accessible modal dialogs |
+| **clsx** | Conditional class names |
 
 ---
 
 ## 📁 Project Structure
 
-This project uses a **monorepo layout** — backend and frontend each live in their own subdirectory.
-
 ```
-bank-transaction-system/               ← repo root
-├── package.json                       # Monorepo root: install:all, dev, build scripts
-├── .gitignore                         # Shared git ignore rules
-├── README.md                          # This file
+bank-transaction-system/
+├── package.json                       # Monorepo scripts: install:all, dev, build
+├── README.md
 │
 ├── backend/                           # Node.js / Express API
-│   ├── server.js                      # Application entry point  (node backend/server.js)
-│   ├── package.json                   # Backend dependencies & scripts
-│   ├── package-lock.json
-│   ├── .env                           # Environment variables (git-ignored)
-│   ├── .env.example                   # Safe placeholder reference
-│   │
+│   ├── server.js                      # Entry point (port 3000)
+│   ├── package.json
 │   ├── scripts/
 │   │   └── seedDemo.js               # Demo data seeder
-│   │
 │   └── src/
-│       ├── app.js                     # Express app setup, middleware & route wiring
+│       ├── app.js                     # Express setup, middleware & routes
 │       ├── config/
-│       │   └── db.js                  # MongoDB connection config
+│       │   ├── db.js                  # MongoDB connection
+│       │   └── constants.js           # App-wide constants
 │       ├── routes/
-│       │   ├── auth.routes.js         # POST /api/auth/login|register|logout
-│       │   ├── account.routes.js      # GET|POST /api/account
-│       │   ├── transaction.routes.js  # POST /api/transactions + history + CSV export
-│       │   ├── profile.routes.js      # GET|PATCH /api/profile
-│       │   └── admin.routes.js        # PATCH /api/admin/accounts/:id/freeze|unfreeze
+│       │   ├── auth.routes.js         # POST login|register|logout
+│       │   ├── account.routes.js      # POST create, GET list, GET detail, GET balance
+│       │   ├── transaction.routes.js  # POST transfer, GET history, GET export
+│       │   ├── profile.routes.js      # GET|PATCH profile
+│       │   └── admin.routes.js        # GET accounts, POST freeze|unfreeze
 │       ├── controllers/
-│       │   ├── auth.controller.js
-│       │   ├── account.controller.js
-│       │   ├── transaction.controller.js
-│       │   ├── profile.controller.js
-│       │   └── admin.controller.js
+│       │   ├── auth.controller.js     # Register, login (isAdmin in JWT), logout
+│       │   ├── account.controller.js  # Create, list, detail, balance
+│       │   ├── transaction.controller.js  # Transfer, history, export
+│       │   ├── profile.controller.js  # Get/update profile (address flattening)
+│       │   └── admin.controller.js    # Freeze, unfreeze, list all accounts
 │       ├── middleware/
-│       │   ├── auth.middleware.js        # JWT verify, authAdmin
-│       │   ├── auditLog.middleware.js    # Non-blocking request logger
-│       │   └── rateLimiter.middleware.js # express-rate-limit (auth + transfer)
+│       │   ├── auth.middleware.js      # JWT verify + null check, admin guard
+│       │   ├── auditLog.middleware.js  # Non-blocking audit via res.on('finish')
+│       │   └── rateLimiter.middleware.js
 │       ├── models/
-│       │   ├── user.model.js
-│       │   ├── account.model.js
-│       │   ├── transaction.model.js
-│       │   ├── ledger.model.js
-│       │   ├── blackList.model.js
-│       │   └── auditLog.model.js
-│       └── services/
-│           └── email.service.js          # SMTP email with DISABLE_EMAILS flag
+│       │   ├── user.model.js          # name, email, password, isAdmin, profile fields
+│       │   ├── account.model.js       # user, currency, status, balance (denormalized)
+│       │   ├── transaction.model.js   # from, to, amount, status, idempotencyKey
+│       │   ├── ledger.model.js        # account, transaction, type (DEBIT/CREDIT), amount
+│       │   ├── blackList.model.js     # token blacklist with TTL auto-expiry
+│       │   ├── audit.model.js         # Admin action audits
+│       │   └── auditLog.model.js      # Request-level audit logs
+│       ├── services/
+│       │   └── email.service.js       # SMTP with Gmail OAuth2 support
+│       └── utils/
+│           ├── response.js            # successResponse / errorResponse helpers
+│           └── validation.js          # Amount range, date range validators
 │
 └── frontend/                          # React 18 + Vite 5 SPA
     ├── package.json
     ├── vite.config.js                 # Dev proxy: /api/* → backend :3000
-    ├── tailwind.config.js
-    ├── postcss.config.js
+    ├── tailwind.config.js             # Custom colors: brand, credit, debit, surface
     ├── index.html
-    ├── .env.example
     └── src/
-        ├── main.jsx                   # React root (BrowserRouter → providers → App)
-        ├── App.jsx                    # Route definitions (lazy-loaded pages)
-        ├── index.css                  # Tailwind + component shortcuts
+        ├── main.jsx                   # React root + providers
+        ├── App.jsx                    # Routes + MobileNav state management
+        ├── index.css                  # Tailwind directives + component classes
         ├── context/
-        │   ├── AuthContext.jsx        # useAuth() — login, logout, refreshUser
-        │   └── ToastContext.jsx       # useToast() — showToast, removeToast
+        │   ├── AuthContext.jsx        # useAuth() — login, logout, user state
+        │   └── ToastContext.jsx       # useToast() — notification system
         ├── lib/
-        │   ├── api.js                 # Axios instance + API_ROUTES constants
+        │   ├── api.js                 # Axios instance + API_ROUTES + helper functions
         │   ├── auth.js                # JWT helpers: setToken, getToken, isAdmin
-        │   └── download.js            # downloadBlob, csvFilename utilities
+        │   ├── format.js             # formatCurrency (₹), formatDate, formatDateTime
+        │   └── download.js            # Blob download utilities
+        ├── hooks/
+        │   ├── useAccounts.js         # Account list + detail hooks
+        │   ├── useAuth.js             # Auth state hook
+        │   └── useTransactions.js     # Transaction list, create transfer, CSV export
         ├── components/
-        │   ├── ProtectedRoute.jsx     # Redirects to /login if unauthenticated
-        │   ├── AdminRoute.jsx         # Redirects to /unauthorized if not admin
-        │   ├── Header.jsx             # Top nav bar with mobile hamburger
-        │   ├── MobileNav.jsx          # Slide-in side drawer (framer-motion)
-        │   ├── Toast.jsx              # Fixed notification stack
-        │   ├── AccountCard.jsx        # Account info + Transfer / Details buttons
-        │   ├── TransactionList.jsx    # Colour-coded transaction rows
-        │   ├── TransferForm.jsx       # Controlled fund transfer form
+        │   ├── Header.jsx             # Top nav with mobile hamburger button
+        │   ├── MobileNav.jsx          # Slide-in drawer with animated backdrop
+        │   ├── AccountCard.jsx        # Account info card (status-aware, balance toggle)
+        │   ├── TransferModal.jsx      # Headless UI dialog (select or manual ID input)
+        │   ├── TransferForm.jsx       # Controlled transfer form with validation
+        │   ├── TransactionList.jsx    # Color-coded transaction rows
         │   ├── FilterBar.jsx          # Date/type/amount/sort filter controls
-        │   ├── ThreeDParallaxHero.jsx # react-three-fiber hero (lazy, reduced-motion safe)
-        │   └── Scene3DInner.jsx       # Actual Three.js canvas (code-split)
+        │   ├── Badge.jsx              # Status badge component
+        │   ├── Toast.jsx              # Fixed notification stack
+        │   ├── ProtectedRoute.jsx     # Auth guard → /login
+        │   ├── AdminRoute.jsx         # Admin guard → /unauthorized
+        │   └── ErrorBoundary.jsx      # Dark-themed error boundary
         └── pages/
             ├── Auth/
             │   ├── Login.jsx
             │   └── Register.jsx
+            ├── Dashboard.jsx          # Account overview, stats, recent transactions
             ├── Accounts/
-            │   └── AccountDetail.jsx
+            │   ├── AccountsList.jsx   # All accounts with balance toggle
+            │   └── AccountDetail.jsx  # Single account view + transfer form
+            ├── Transactions.jsx       # Full history with filters + CSV export
+            ├── Profile.jsx            # Profile editor
             ├── Admin/
-            │   └── AdminDashboard.jsx
-            ├── Dashboard.jsx
-            ├── Transactions.jsx
-            ├── Profile.jsx
+            │   └── AdminDashboard.jsx # All accounts, freeze/unfreeze controls
             ├── NotFound.jsx           # 404
             └── Unauthorized.jsx       # 403
 ```
@@ -196,79 +210,49 @@ bank-transaction-system/               ← repo root
 
 ## 🏗 Architecture & Data Flow
 
-### High-Level Architecture Diagram
+### High-Level Architecture
 
 ```
-User Request
+Client (React SPA)
+    ↓ HTTPS / Axios
+Express Server (:3000)
     ↓
-Express Server (port 3000)
-    ↓
-auditLogMiddleware  ← logs every request to audit_logs (non-blocking)
-    ↓
-Rate Limiter (auth / transfer routes)
-    ↓
-Routes (auth / account / transaction / profile / admin)
-    ↓
-auth Middleware (JWT verification + blacklist check)
-    ↓
-express-validator (input validation on write routes)
-    ↓
-Controller (business logic)
-    ↓
-Models (database operations)
-    ↓
-MongoDB (data persistence)
-    ↓
-Email Service (if DISABLE_EMAILS !== "true")
-    ↓
-Response JSON
+├── auditLogMiddleware   → logs to audit_logs (non-blocking, res.on('finish'))
+├── rateLimiter          → auth (20/15min), transfer (30/15min)
+├── authMiddleware       → JWT verify + blacklist + null check
+├── express-validator    → input validation
+├── Controller           → business logic
+├── Models + Sessions    → MongoDB (ACID transactions)
+├── Email Service        → SMTP / OAuth2 (if enabled)
+└── Response             → successResponse / errorResponse format
 ```
 
-### Request Flow for a Transaction
+### Transaction Flow (Double-Entry Ledger)
 
 ```
-1. User sends POST /api/transactions/
-   ├── Body: { fromAccount, toAccount, amount, idempotencyKey }
-   ├── Headers: { Authorization: "Bearer <JWT_TOKEN>" }
-   
-2. authMiddleware.authMiddleware
-   ├── Extracts token from header/cookies
-   ├── Verifies JWT signature
-   ├── Checks token blacklist
-   ├── Attaches user info to req.user
-   └── Next → Controller
-   
-3. transactionController.createTransaction()
-   ├── Validates required fields
-   ├── Checks idempotency key (prevents duplicates)
-   ├── Fetches user accounts from DB
-   ├── Validates account status (must be ACTIVE)
-   ├── Calculates balance from ledger aggregation
-   ├── Validates sufficient funds
-   ├── Starts MongoDB transaction session
-   ├── Creates transaction document (status: PENDING)
-   ├── Creates DEBIT ledger entry (fromAccount)
-   ├── Creates CREDIT ledger entry (toAccount)
-   ├── Marks transaction COMPLETED
-   ├── Commits all changes atomically
-   ├── Sends email notification
-   └── Returns success response
-   
-4. Response sent to client
-   └── Status 201 + Transaction details
-```
+1. POST /api/transactions
+   Body: { fromAccount, toAccount, amount, idempotencyKey }
+   Header: Authorization: Bearer <JWT>
 
-### Balance Calculation Flow
+2. Validation
+   ├── Check idempotency key (return cached if duplicate)
+   ├── Verify both accounts exist and are ACTIVE
+   ├── Verify sender is the authenticated user
+   └── Check sufficient balance (denormalized account.balance)
 
-```
-Account.getBalance()
-    ↓
-MongoDB Aggregation Pipeline:
-    1. $match: Filter ledger entries for this account
-    2. $group: Calculate totalDebit & totalCredit
-    3. $project: balance = totalCredit - totalDebit
-    ↓
-Returns: balance (positive = surplus, negative = overdraft)
+3. MongoDB Session (atomic)
+   ├── Create Transaction document (status: PENDING)
+   ├── Create DEBIT ledger entry (fromAccount, -amount)
+   ├── Create CREDIT ledger entry (toAccount, +amount)
+   ├── Update fromAccount.balance -= amount
+   ├── Update toAccount.balance += amount
+   ├── Set transaction status = COMPLETED
+   └── COMMIT (all-or-nothing)
+
+4. Post-transaction
+   ├── Send success email to sender
+   ├── Send admin alert if amount > threshold
+   └── Return 201 + transaction details
 ```
 
 ---
@@ -276,130 +260,103 @@ Returns: balance (positive = surplus, negative = overdraft)
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-- Node.js v18+
-- MongoDB (local or Atlas)
-- npm v9+
 
-### Step 1: Clone the repository
+- **Node.js** v18+
+- **MongoDB** (local or Atlas) — must be a **replica set** for transaction support
+- **npm** v9+
+
+### Quick Start
+
 ```bash
+# 1. Clone the repository
 git clone <repository-url>
 cd bank-transaction-system
-```
 
-### Step 2: Install dependencies
-
-**Option A — install both at once from the repo root:**
-```bash
+# 2. Install all dependencies (backend + frontend)
 npm run install:all
-```
 
-**Option B — install individually:**
-```bash
-cd backend  && npm install
-cd ../frontend && npm install
-```
-
-### Step 3: Configure backend environment
-```bash
+# 3. Configure environment
 cp backend/.env.example backend/.env
-# Then edit backend/.env with your MongoDB URI, JWT secret, SMTP details, etc.
-```
+# Edit backend/.env with your MongoDB URI, JWT secret, etc.
 
-### Step 4: Configure frontend environment (optional)
-```bash
-cp frontend/.env.example frontend/.env.local
-# Set VITE_API_BASE_URL if not using the built-in Vite proxy
-# Set VITE_ALLOW_DEMO=true to enable the demo login button
-```
-
-### Step 5: Start MongoDB
-```bash
-# Local MongoDB:
-mongod
-
-# OR use a MongoDB Atlas connection string in backend/.env
-```
-
-### Step 6: Run the application
-
-**Run backend only (API server on :3000):**
-```bash
-cd backend && npm run dev
-```
-
-**Run frontend only (Vite dev server on :5173, proxies /api/* → :3000):**
-```bash
-cd frontend && npm run dev
-```
-
-**Run both simultaneously from repo root (Windows):**
-```bash
+# 4. Start both servers (development)
 npm run dev
 ```
 
-**Production build:**
-```bash
-npm run build          # builds frontend/dist/
-npm run start          # starts backend in production mode
-```
+| Service | URL |
+|---------|-----|
+| Backend API | `http://localhost:3000` |
+| Frontend App | `http://localhost:5173` |
 
-**Seed demo data:**
-```bash
-npm run seed           # creates demo+alice@example.com and demo+bob@example.com
-```
+### Other Commands
 
-Backend API: `http://localhost:3000`  
-Frontend app: `http://localhost:5173`
+```bash
+npm run seed           # Seed demo users (demo+alice@example.com, demo+bob@example.com)
+npm run build          # Build frontend for production (→ frontend/dist/)
+npm run start          # Start backend in production mode (serves frontend/dist/)
+```
 
 ---
 
 ## 🔧 Environment Configuration
 
-Create `backend/.env` (copy from `backend/.env.example`):
+Create `backend/.env` from `backend/.env.example`:
 
 ```env
 # Server
 PORT=3000
 NODE_ENV=development
 
-# MongoDB (local)
-MONGO_URI=YOUR LOCAL MONGODB URI
-# MongoDB Atlas example (replace placeholders with your actual credentials):
-# MONGO_URI=YOUR ATLAS URI
+# MongoDB (must be a replica set for transactions)
+MONGO_URI=YOUR_MONGO_URI
 
-# JWT Secret (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+# JWT Secret (generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 JWT_SECRET=REPLACE_WITH_STRONG_RANDOM_SECRET
 
-# Email — set DISABLE_EMAILS=true in dev to suppress sends
-DISABLE_EMAILS=true
-SMTP_HOST=smtp.example.com
+# Email Configuration
+DISABLE_EMAILS=true                    # Set to 'false' to enable email sending
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=no-reply@example.com
-SMTP_PASS=REPLACE_WITH_APP_PASSWORD
-EMAIL_FROM=no-reply@example.com
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password            # Use app-specific password, never login password
+EMAIL_FROM=no-reply@yourbank.com
 
-# Rate Limiting (optional — these are the defaults)
+# Gmail OAuth2 (optional, more secure than app passwords)
+# GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
+# GMAIL_CLIENT_SECRET=your-client-secret
+# GMAIL_REFRESH_TOKEN=your-refresh-token
+
+# Admin alert email
+ADMIN_ALERT_EMAIL=admin@yourbank.com
+
+# Rate Limiting (optional, these are defaults)
 AUTH_RATE_LIMIT_WINDOW_MIN=15
 AUTH_RATE_LIMIT_MAX=20
 TRANSFER_RATE_LIMIT_WINDOW_MIN=15
 TRANSFER_RATE_LIMIT_MAX=30
 ```
 
-> Copy `.env.example` from the repo root for a full reference with all available variables.
-
-**Important Notes:**
-- `JWT_SECRET`: Generate a strong random string (min 32 characters)
-- `DISABLE_EMAILS=true`: Prevents any real emails from being sent (safe for development)
-- `SMTP_PASS`: Use an app-specific password, never your login password
-- Never commit `.env` to version control
+**Frontend** (optional): Create `frontend/.env.local`:
+```env
+VITE_API_BASE_URL=                     # Empty = use Vite proxy (default for dev)
+VITE_USE_COOKIE_AUTH=true              # Enable httpOnly cookie auth
+VITE_ALLOW_DEMO=true                   # Show demo login button
+```
 
 ---
 
 ## 📡 API Endpoints
 
-### Authentication Routes (`/api/auth`)
+### Authentication (`/api/auth`)
 
-#### Register User
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/register` | Register a new user |
+| `POST` | `/api/auth/login` | Login and receive JWT (also set as httpOnly cookie) |
+| `POST` | `/api/auth/logout` | Logout (blacklists token) |
+
+#### Register
+
 ```http
 POST /api/auth/register
 Content-Type: application/json
@@ -407,732 +364,301 @@ Content-Type: application/json
 {
   "name": "John Doe",
   "email": "john@example.com",
-  "password": "securePassword123"
+  "password": "SecurePass123!"
 }
 ```
-**Response:** `201 Created`
+
+**Response** `201`:
 ```json
 {
-  "message": "User registered successfully.",
-  "user": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "John Doe",
-    "email": "john@example.com"
+  "success": true,
+  "data": {
+    "message": "User registered successfully.",
+    "user": { "_id": "...", "name": "John Doe", "email": "john@example.com" },
+    "token": "eyJhbGci..."
   }
 }
 ```
 
-#### Login User
+#### Login
+
 ```http
 POST /api/auth/login
 Content-Type: application/json
 
-{
-  "email": "john@example.com",
-  "password": "securePassword123"
-}
-```
-**Response:** `200 OK`
-```json
-{
-  "message": "Login successful.",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCIrthbbXVCJ9...",
-  "user": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "John Doe",
-    "email": "john@example.com"
-  }
-}
+{ "email": "john@example.com", "password": "SecurePass123!" }
 ```
 
-#### Logout User
-```http
-POST /api/auth/logout
-Authorization: Bearer <JWT_TOKEN>
-```
-**Response:** `200 OK`
-```json
-{
-  "message": "User logged out successfully."
-}
-```
+**Response** `200`: Same structure as register. JWT includes `{ userId, isAdmin }`.
 
 ---
 
-### Account Routes (`/api/account`)
+### Accounts (`/api/account`)
 
-#### Create Account
-```http
-POST /api/account/
-Authorization: Bearer <JWT_TOKEN>
-Content-Type: application/json
-
-{
-  "currency": "INR"
-}
-```
-**Response:** `201 Created`
-```json
-{
-  "message": "Account created successfully.",
-  "account": {
-    "_id": "507f1f77bcf86cd729489012",
-    "user": "507f1f77bcf86cd795436011",
-    "currency": "INR",
-    "status": "ACTIVE",
-    "createdAt": "2026-02-21T10:00:00Z"
-  }
-}
-```
-
-#### Get User Accounts
-```http
-GET /api/account/
-Authorization: Bearer <JWT_TOKEN>
-```
-**Response:** `200 OK`
-```json
-{
-  "message": "Accounts fetched successfully.",
-  "accounts": [
-    {
-      "_id": "507f1f77bcf86cd799439012",
-      "user": "507f1f77bcf86cd799439011",
-      "currency": "INR",
-      "status": "ACTIVE"
-    }
-  ]
-}
-```
-
-#### Get Account Balance
-```http
-GET /api/account/balance/:accountId
-Authorization: Bearer <JWT_TOKEN>
-```
-**Response:** `200 OK`
-```json
-{
-  "message": "Balance fetched successfully.",
-  "balance": 50000,
-  "accountId": "507f1f77bcf86cd799439012"
-}
-```
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/account` | JWT | Create a new account |
+| `GET` | `/api/account` | JWT | List user's accounts |
+| `GET` | `/api/account/:accountId` | JWT | Get account details |
+| `GET` | `/api/account/balance/:accountId` | JWT | Get account balance & status |
 
 ---
 
-### Profile Routes (`/api/profile`)
+### Transactions (`/api/transactions`)
 
-#### Get Profile
-```http
-GET /api/profile
-Authorization: Bearer <JWT_TOKEN>
-```
-**Response:** `200 OK` — returns `name, email, phoneNumber, address, dateOfBirth`.
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/transactions` | JWT | Create a fund transfer |
+| `GET` | `/api/transactions` | JWT | List transactions (paginated, filterable) |
+| `GET` | `/api/transactions/export` | JWT | Export transactions as CSV |
 
-#### Update Profile
-```http
-PATCH /api/profile
-Authorization: Bearer <JWT_TOKEN>
-Content-Type: application/json
+#### Query Parameters for GET `/api/transactions`
 
-{
-  "name": "Jane Doe",
-  "phoneNumber": "+919876543210",
-  "address": "123 Main St, Mumbai",
-  "dateOfBirth": "1992-08-20"
-}
-```
-**Response:** `200 OK` — returns updated user (non-sensitive fields only).
-
----
-
-### Admin Routes (`/api/admin`)
-
-> Requires an account with `isAdmin: true`. Contact a super-admin or run a one-off DB update to assign the flag.
-
-#### Freeze Account
-```http
-POST /api/admin/accounts/:accountId/freeze
-Authorization: Bearer <ADMIN_JWT_TOKEN>
-```
-**Response:** `200 OK` — account status set to `FROZEN`. Transfers from frozen accounts are blocked.
-
-#### Unfreeze Account
-```http
-POST /api/admin/accounts/:accountId/unfreeze
-Authorization: Bearer <ADMIN_JWT_TOKEN>
-```
-**Response:** `200 OK` — account status restored to `ACTIVE`.
-
----
-
-### Transaction Routes (`/api/transactions`)
-
-#### Create Transaction
-```http
-POST /api/transactions/
-Authorization: Bearer <JWT_TOKEN>
-Content-Type: application/json
-
-{
-  "fromAccount": "507f1f77bcf86cd799439012",
-  "toAccount": "507f1f77bcf86cd799439013",
-  "amount": 5000,
-  "idempotencyKey": "unique-key-12345"
-}
-```
-**Response:** `201 Created`
-```json
-{
-  "message": "Transaction completed successfully.",
-  "transaction": {
-    "_id": "507f1f77bcf86cd799439014",
-    "fromAccount": "507f1f77bcf86cd799439012",
-    "toAccount": "507f1f77bcf86cd799439013",
-    "amount": 5000,
-    "status": "COMPLETED",
-    "idempotencyKey": "unique-key-12345",
-    "createdAt": "2026-02-21T10:05:00Z"
-  }
-}
-```
-
-#### Get Transaction History
-```http
-GET /api/transactions
-Authorization: Bearer <JWT_TOKEN>
-```
-**Query Parameters:**
 | Param | Type | Description |
 |-------|------|-------------|
-| `startDate` | ISO date | Filter `createdAt >= startDate` |
-| `endDate` | ISO date | Filter `createdAt <= endDate` |
-| `type` | `credit`\|`debit` | Filter by direction relative to user (omit for all) |
-| `minAmount` | number | Lower bound on `amount` |
-| `maxAmount` | number | Upper bound on `amount` |
 | `page` | number | Page number (default: 1) |
-| `limit` | number | Records per page (default: 20, max: 100) |
-| `sort` | `field:asc\|desc` | e.g. `amount:desc` or `createdAt:asc` |
-
-**Response:** `200 OK`
-```json
-{ "data": [...], "page": 1, "limit": 20, "total": 45 }
-```
-
-#### Export Transactions as CSV
-```http
-GET /api/transactions/export?startDate=2026-01-01&type=debit
-Authorization: Bearer <JWT_TOKEN>
-```
-Supports the same query params as the history endpoint. Downloads a `.csv` file.
-If `page`/`limit` are omitted, exports **all** matching records (max 1000 per request).
+| `limit` | number | Items per page (default: 20, max: 100) |
+| `type` | string | Filter: `DEBIT`, `CREDIT`, or `ALL` |
+| `startDate` | ISO date | Filter: transactions after this date |
+| `endDate` | ISO date | Filter: transactions before this date |
+| `minAmount` | number | Filter: minimum amount (auto-swapped if > maxAmount) |
+| `maxAmount` | number | Filter: maximum amount (auto-swapped if < minAmount) |
+| `sortBy` | string | Sort field: `date`, `amount` (default: `date`) |
+| `sortOrder` | string | Sort direction: `asc`, `desc` (default: `desc`) |
 
 ---
 
-#### Initial Funds Transaction (System)
-```http
-POST /api/transactions/system/initial-funds
-Authorization: Bearer <JWT_TOKEN>
-Content-Type: application/json
+### Profile (`/api/profile`)
 
-{
-  "toAccount": "507f1f77bcf86cd799439012",
-  "amount": 100000,
-  "idempotencyKey": "initial-funds-12345"
-}
-```
-**Response:** `201 Created`
-```json
-{
-  "message": "Initial funds transaction completed successfully.",
-  "transaction": { ... }
-}
-```
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/profile` | JWT | Get user profile |
+| `PATCH` | `/api/profile` | JWT | Update profile fields |
+
+Updatable fields: `name`, `phoneNumber`, `address` (string or `{street, city, country}` object), `dateOfBirth`.
 
 ---
 
-## 🗄 Database Schema
+### Admin (`/api/admin`)
 
-### User Schema
-```javascript
-{
-  _id: ObjectId,
-  name: String (required, 2-100 chars),
-  email: String (required, unique, validated),
-  password: String (hashed with bcrypt, select: false),
-  phoneNumber: String (optional, E.164-compatible pattern),
-  address: String (optional, max 300 chars),
-  dateOfBirth: Date (optional, ISO 8601, must be in the past),
-  isAdmin: Boolean (default: false, select: false),
-  systemUser: Boolean (default: false, immutable, select: false),
-  createdAt: Date,
-  updatedAt: Date
-}
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/admin/accounts` | Admin JWT | List all accounts (with user info) |
+| `POST` | `/api/admin/accounts/:accountId/freeze` | Admin JWT | Freeze an account |
+| `POST` | `/api/admin/accounts/:accountId/unfreeze` | Admin JWT | Unfreeze an account |
+
+---
+
+## 📊 Database Schema
+
+### User
+```
+name         String (required)
+email        String (required, unique, lowercase)
+password     String (hashed, select: false)
+isAdmin      Boolean (default: false, select: false)
+phoneNumber  String
+address      String
+dateOfBirth  Date
 ```
 
-### Account Schema
-```javascript
-{
-  _id: ObjectId,
-  user: ObjectId (ref: "user", required),
-  status: String (enum: ["ACTIVE", "FROZEN", "CLOSED"], default: "ACTIVE"),
-  currency: String (default: "INR", required),
-  createdAt: Date,
-  updatedAt: Date
-}
+### Account
+```
+user         ObjectId → User (required)
+currency     String (default: 'INR')
+status       String: ACTIVE | FROZEN | CLOSED (default: ACTIVE)
+balance      Number (default: 4000, denormalized for fast reads)
 ```
 
-### Transaction Schema
-```javascript
-{
-  _id: ObjectId,
-  fromAccount: ObjectId (ref: "account", required),
-  toAccount: ObjectId (ref: "account", required),
-  amount: Number (required, min: 0.01),
-  status: String (enum: ["PENDING", "COMPLETED", "FAILED", "REVERSED"], default: "PENDING"),
-  idempotencyKey: String (unique, required),
-  createdAt: Date,
-  updatedAt: Date
-}
+### Transaction
+```
+fromAccount  ObjectId → Account
+toAccount    ObjectId → Account
+amount       Number (required, > 0)
+status       String: PENDING | COMPLETED | FAILED
+idempotencyKey  String (unique, sparse)
+createdAt    Date (auto)
 ```
 
-### Ledger Schema
-```javascript
-{
-  _id: ObjectId,
-  account: ObjectId (ref: "account", required, immutable),
-  amount: Number (required, immutable),
-  transaction: ObjectId (ref: "transaction", required),
-  type: String (enum: ["DEBIT", "CREDIT"], required, immutable),
-  createdAt: Date,
-  updatedAt: Date
-}
+### Ledger (Immutable)
+```
+account      ObjectId → Account
+transaction  ObjectId → Transaction
+type         String: DEBIT | CREDIT
+amount       Number
+createdAt    Date (auto)
 ```
 
-### Token Blacklist Schema
-```javascript
-{
-  _id: ObjectId,
-  token: String (required, unique),
-  createdAt: Date,
-  expiresAt: Date
-}
+### BlackList (Token Blacklist)
+```
+token        String (unique)
+createdAt    Date (auto, TTL: 7 days)
 ```
 
-### AuditLog Schema
-```javascript
-{
-  _id: ObjectId,
-  userId: ObjectId (ref: "user", nullable — null for unauthenticated requests),
-  ip: String,
-  method: String (GET, POST, PATCH, etc.),
-  route: String (e.g. /api/transactions/),
-  meta: Mixed (safe fields only: amount, accountId, currency — no passwords/tokens),
-  createdAt: Date   // updatedAt intentionally omitted
-}
+### AuditLog (Request Logging)
+```
+userId       ObjectId → User
+method       String (GET, POST, etc.)
+url          String
+statusCode   Number
+ip           String
+userAgent    String
+responseTime Number (ms)
+createdAt    Date (auto)
+```
+
+### Audit (Admin Actions)
+```
+actor        ObjectId → User
+action       String (ACCOUNT_FROZEN, ACCOUNT_UNFROZEN, etc.)
+entityType   String
+entityId     ObjectId
+meta         Mixed
+source       String
+createdAt    Date (auto)
 ```
 
 ---
 
-## 🔄 How It Works
+## 🖥 Frontend Pages & Components
+
+### Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| **Login** | `/login` | Email/password login form |
+| **Register** | `/register` | New user registration |
+| **Dashboard** | `/dashboard` | Account overview, stats cards, recent transactions |
+| **Accounts** | `/accounts` | All accounts with combined balance, transfer quick-action |
+| **Account Detail** | `/accounts/:id` | Single account view with transfer form |
+| **Transactions** | `/transactions` | Full history with filter bar + CSV export |
+| **Profile** | `/profile` | Edit profile fields |
+| **Admin** | `/admin` | Admin dashboard: all accounts, freeze/unfreeze |
+| **Not Found** | `*` | 404 page |
+| **Unauthorized** | `/unauthorized` | 403 page |
+
+### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| **Header** | Sticky top nav with desktop links + mobile hamburger |
+| **MobileNav** | Slide-in drawer with animated backdrop (Framer Motion) |
+| **AccountCard** | Account info with status badge, balance show/hide toggle |
+| **TransferModal** | Headless UI dialog — select from own accounts or enter ID manually |
+| **TransferForm** | Standalone transfer form with validation |
+| **TransactionList** | Color-coded rows (green=credit, red=debit) |
+| **FilterBar** | Date range, type, amount range, sort controls |
+| **Toast** | Fixed notification stack with auto-dismiss |
+| **ErrorBoundary** | Dark-themed crash fallback with reload button |
+
+### Theme
+
+The app uses a **dark theme** throughout:
+- Background: `gray-950` / `gray-900`
+- Cards: `gray-800` with `gray-700` borders
+- Text: `gray-100` (primary), `gray-400` (secondary)
+- Brand: Navy blue (`brand-500` to `brand-800`)
+- Credit: Green (`credit-500` to `credit-700`)
+- Debit: Red (`debit-400` to `debit-700`)
+- Currency: Indian Rupee (₹) via `Intl.NumberFormat` with `en-IN` locale
+
+---
+
+## 🔒 Security
 
 ### Authentication Flow
-1. User registers with email, name and password — validated by `express-validator`
-2. Password is hashed with bcrypt before save
-3. User logs in with credentials (also validated)
-4. JWT token is issued and returned in JSON body + cookie
-5. Protected routes verify token validity and blacklist status
-6. Logout blacklists the token permanently
 
-### Profile Update Flow
-1. User sends `PATCH /api/profile` with any subset of: `name`, `phoneNumber`, `address`, `dateOfBirth`
-2. `express-validator` checks format/length constraints (e.g. ISO date, date must be in the past)
-3. Only allow-listed fields are written; password and email cannot be changed here
-4. Returns updated user with non-sensitive fields only
-
-### Admin Freeze / Unfreeze Flow
-1. Admin sends `POST /api/admin/accounts/:accountId/freeze`
-2. `authAdminMiddleware` verifies JWT and checks `user.isAdmin === true`
-3. Account `status` is set to `FROZEN`
-4. All subsequent transfer attempts from/to that account are blocked by the existing status check in `createTransaction`
-5. Unfreeze restores status to `ACTIVE`
-
-### Audit Logging
-- `auditLogMiddleware` runs on **every request** after body parsing
-- Captures: `userId` (from `req.user` if set), `ip`, `method`, `route`, safe `meta` (amount / accountId)
-- Write failures are caught and logged to console — they **never interrupt** the request
-- Entries are stored in the `auditlogs` MongoDB collection
-
-### Transaction Flow (Double-Entry Ledger)
-1. User initiates transfer from Account A to Account B
-2. System checks Account A has sufficient balance (via ledger aggregation)
-3. Idempotency key prevents duplicate processing
-4. MongoDB transaction begins (ACID guarantee)
-5. Transaction record created with PENDING status
-6. DEBIT entry created for Account A (money out)
-7. CREDIT entry created for Account B (money in)
-8. Transaction marked COMPLETED
-9. All changes committed atomically
-10. Email notification sent to user
-11. Response returned with transaction details
-
-### Balance Calculation
-- **Balance = Total Credits - Total Debits**
-- All ledger entries are immutable (cannot be modified/deleted)
-- Balance is calculated on-demand using MongoDB aggregation
-- If balance < requested amount → Insufficient funds error
-
-### Idempotency
-- Every transaction requires a unique `idempotencyKey`
-- Duplicate requests with same key return the cached response
-- Prevents accidental double-transfers if request is retried
-
----
-
-## 🧩 Key Components
-
-### Middleware
-- **auth.middleware.js**
-  - `authMiddleware` — verifies JWT, checks blacklist, attaches `req.user`
-  - `authSystemUserMiddleware` — extends auth; requires `systemUser: true`
-  - `authAdminMiddleware` — extends auth; requires `isAdmin: true` (admin-only routes)
-- **auditLog.middleware.js** — writes a safe audit entry for every request; failures are non-fatal
-- **rateLimiter.middleware.js**
-  - `authRateLimiter` — applied to all `/api/auth/*` routes (default: 20 req / 15 min per IP)
-  - `transferRateLimiter` — applied to `POST /api/transactions/` (default: 30 req / 15 min per IP)
-  - All limits are read from env vars — see [Environment Configuration](#environment-configuration)
-
-### Controllers
-- **auth.controller.js** — registration (with validation result check), login, logout
-- **account.controller.js** — account creation, listing, balance retrieval
-- **transaction.controller.js** — fund transfer, initial funds, history, CSV export
-- **profile.controller.js** — get profile, validated profile update
-- **admin.controller.js** — freeze account, unfreeze account
-
-### Models
-- **user.model.js** — user schema with profile fields (`phoneNumber`, `address`, `dateOfBirth`) and `isAdmin` flag
-- **account.model.js** — includes `getBalance()` aggregation method
-- **ledger.model.js** — immutable entries; pre-hooks block all update/delete operations
-- **auditLog.model.js** — stores per-request audit entries in `auditlogs` collection
-- **transaction.model.js** — transaction lifecycle schema
-- **blackList.model.js** — invalidated JWT store
-
-### Services
-- **email.service.js** — SMTP-based email using env vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`); setting `DISABLE_EMAILS=true` skips actual sends and logs to console instead
-
----
-
-## ⚠️ Error Handling
-
-### Common Errors
-
-| Error | Status | Cause | Solution |
-|-------|--------|-------|----------|
-| Validation errors | 422 | Invalid / missing fields (express-validator) | Check `errors` array in response |
-| Missing required fields | 400 | Incomplete request body | Provide all required fields |
-| Insufficient funds | 400 | Balance < amount | Add funds to account first |
-| Account not found | 404 | Invalid account ID | Verify account ID |
-| Unauthorized | 401 | Invalid/expired token | Login again to get new token |
-| Token blacklisted | 401 | Token invalidated via logout | Cannot reuse, login again |
-| Account not active | 400 | Account frozen/closed | Activate account first |
-| Account already frozen | 400 | Freeze called on already-frozen account | Check account status first |
-| Duplicate idempotency key | 400 | Same key used twice | Use unique idempotency key |
-| Forbidden (admin) | 403 | `isAdmin` not set on user | Grant admin flag via DB |
-| Too many requests | 429 | Rate limit exceeded | Wait for window to reset (see `RateLimit-Reset` header) |
-
----
-
-## 🛠 Development & Deployment
-
-### Running Tests
-```bash
-# Currently no automated tests configured
-# Manual testing via Postman recommended
+```
+Register → bcrypt hash → save user → generate JWT (userId + isAdmin) → set httpOnly cookie + return token
+Login    → verify password → generate JWT (userId + isAdmin) → set httpOnly cookie + return token
+Logout   → add token to BlackList → clear cookie
 ```
 
-### Seeding Demo Data
+### Cookie Configuration (Production)
 
-The `scripts/seedDemo.js` script creates two demo users, their accounts, and an initial-funds transaction so you can explore the API without manual setup.
+```javascript
+{
+  httpOnly: true,        // Not accessible via JavaScript
+  secure: true,          // HTTPS only
+  sameSite: 'strict',    // CSRF protection
+  maxAge: 3 * 24 * 60 * 60 * 1000  // 3 days
+}
+```
 
-**All seed email addresses are dummy values** (`demo+alice@example.com`, `demo+bob@example.com`) — no real emails are used.
+### Rate Limiting
+
+| Route | Window | Max Requests |
+|-------|--------|-------------|
+| `/api/auth/*` | 15 minutes | 20 |
+| `/api/transactions` (POST) | 15 minutes | 30 |
+
+---
+
+## 🚢 Development & Deployment
+
+### Development
 
 ```bash
-# Make sure MONGO_URI is set in your .env file, then:
+npm run dev              # Starts both backend (nodemon) and frontend (vite) concurrently
+```
+
+The Vite dev server proxies `/api/*` requests to `http://localhost:3000`, so no CORS issues in development.
+
+### Production Build
+
+```bash
+npm run build            # Builds frontend → frontend/dist/
+npm run start            # Starts backend which serves frontend/dist/ as static files
+```
+
+### Deployment (Render)
+
+1. Push to GitHub `main` branch
+2. Create a **Web Service** on Render:
+   - **Build Command**: `npm run install:all && npm run build`
+   - **Start Command**: `npm run start`
+   - **Environment**: Node.js
+3. Set all environment variables from `.env.example`
+4. Ensure MongoDB Atlas allows connections from Render IPs
+
+### Demo Seed
+
+```bash
 npm run seed
-# or equivalently:
-node scripts/seedDemo.js
 ```
 
-Expected output:
-```
-✔  Connected to MongoDB.
-  ✔  Created user: demo+alice@example.com
-  ✔  Created user: demo+bob@example.com
-  ✔  Seeded 100,000 INR initial funds into Alice's account.
-
-──── Seed Summary ──────────────────────────────────────
-  User:    demo+alice@example.com
-  Account: <accountId>
-  Password: DemoPass123!  (demo only — change immediately)
-...
-```
-
-> Re-running the seed removes and recreates demo data cleanly.
-
-### Code Quality
-- Use consistent indentation (2 spaces)
-- Add JSDoc comments for complex functions
-- Handle all async errors with try-catch
-
-### Nodemon Configuration
-Auto-restarts server on file changes during development:
-```bash
-npm run dev
-```
-
-### Deployment Checklist
-- [ ] Set `NODE_ENV=production`
-- [ ] Configure secure `JWT_SECRET` (min 32 chars)
-- [ ] Set up MongoDB Atlas or secure MongoDB instance
-- [ ] Configure SMTP credentials for email service
-- [ ] Enable HTTPS/TLS
-- [ ] Set up reverse proxy (nginx/Apache)
-- [ ] Configure rate limiting
-- [ ] Set up monitoring/logging
-- [ ] Enable CORS appropriately
-
-### Production Best Practices
-```javascript
-// Use environment-based config
-const isProduction = process.env.NODE_ENV === 'production';
-
-// Enable CORS selectively
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(','),
-  credentials: true
-}));
-
-// Use connection pooling for MongoDB
-```
+Creates two demo users with accounts:
+- `demo+alice@example.com` / `Password123!`
+- `demo+bob@example.com` / `Password123!`
 
 ---
 
-## 🎨 Frontend Setup
+## 📝 Changelog (Latest)
 
-The frontend is a **React 18 + Vite + Tailwind** single-page application with professional banking UI, responsive design, and full backend integration.
+### Bug Fixes & Improvements
 
-### Quick Start
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend will start at **http://localhost:5173** and proxy `/api/*` requests to the backend.
-
-### Key Features
-
-- **Professional Design System**: Navy primary colors, banking-focused typography, compact ledger tables
-- **Authentication Flow**: Login/Register with JWT token or httpOnly cookie support
-- **Dashboard**: Account overview, recent transactions, quick transfer access
-- **Transaction Ledger**: Full-featured transaction journal with sorting, filtering, CSV export
-- **Admin Console**: Freeze/unfreeze accounts (admin-only routes)
-- **Responsive**: Desktop-first, mobile-friendly layouts
-- **Accessibility**: WCAG AA compliant, keyboard navigation, screen-reader support
-- **No Heavy Animations**: Subtle micro-transitions only, respects `prefers-reduced-motion`
-
-### Technology Stack
-
-- React 18.3+ — UI framework
-- Vite 5.4+ — Build tool with HMR
-- Tailwind CSS 3.4+ — Utility-first styling
-- TanStack Table 8.19+ — Headless table library for ledgers
-- React Router 6.27+ — Client-side routing
-- Framer Motion 11.11+ — Micro-animations
-- Axios 1.7+ — HTTP client with interceptors
-- Headless UI 2.1+ — Accessible modals/dropdowns
-
-### Environment Configuration
-
-Create `frontend/.env.local`:
-
-```bash
-# Backend API URL (leave empty in dev to use Vite proxy)
-VITE_API_BASE_URL=
-
-# Use httpOnly cookies for auth (default: localStorage token)
-VITE_USE_COOKIE_AUTH=false
-
-# Disable animations (for accessibility or performance testing)
-VITE_DISABLE_ANIMATIONS=false
-```
-
-### Scripts
-
-```bash
-npm run dev        # Start Vite dev server with HMR
-npm run build      # Production build to dist/
-npm run preview    # Preview production build locally
-npm run lint       # Run ESLint
-npm run format     # Format with Prettier
-```
-
-### CORS Configuration (Important)
-
-If your frontend and backend are on **different origins** (e.g., production deployment), ensure your backend sets:
-
-```javascript
-// In backend server.js or middleware
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS || 'http://localhost:5173',
-  credentials: true  // MUST be true if using httpOnly cookies
-}));
-```
-
-**For local development:** Vite proxy handles it automatically via `vite.config.js`.
-
-### Full Frontend Documentation
-
-See [frontend/README.md](./frontend/README.md) for comprehensive guides on:
-- Component architecture
-- Custom hooks
-- API integration
-- Design system
-- Accessibility
-- Troubleshooting
-
----
-
-## 📝 Example Usage
-
-### Complete Transaction Workflow
-
-```bash
-# 1. Register User
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Alice",
-    "email": "alice@example.com",
-    "password": "securePass123"
-  }'
-
-# 2. Login (get token)
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "alice@example.com",
-    "password": "securePass123"
-  }'
-# Response contains: token
-
-# 3. Create Account
-curl -X POST http://localhost:3000/api/account/ \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"currency": "INR"}'
-
-# 4. Create another account (for transfer recipient)
-# ... repeated POST to /api/account/
-
-# 5. Add initial funds
-curl -X POST http://localhost:3000/api/transactions/system/initial-funds \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "toAccount": "<ACCOUNT_ID>",
-    "amount": 50000,
-    "idempotencyKey": "fund-1"
-  }'
-
-# 6. Transfer funds
-curl -X POST http://localhost:3000/api/transactions/ \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "fromAccount": "<FROM_ACCOUNT_ID>",
-    "toAccount": "<TO_ACCOUNT_ID>",
-    "amount": 1000,
-    "idempotencyKey": "transfer-1"
-  }'
-
-# 7. Check balance
-curl -X GET http://localhost:3000/api/account/balance/<ACCOUNT_ID> \
-  -H "Authorization: Bearer <TOKEN>"
-
-# 8. View transaction history with filters
-curl -X GET "http://localhost:3000/api/transactions?type=debit&startDate=2026-01-01&page=1&limit=10" \
-  -H "Authorization: Bearer <TOKEN>"
-
-# 9. Export transactions as CSV
-curl -X GET "http://localhost:3000/api/transactions/export?type=credit" \
-  -H "Authorization: Bearer <TOKEN>" \
-  --output transactions.csv
-
-# 10. Update profile
-curl -X PATCH http://localhost:3000/api/profile \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"phoneNumber": "+919876543210", "address": "Mumbai", "dateOfBirth": "1992-08-20"}'
-
-# 11. Logout
-curl -X POST http://localhost:3000/api/auth/logout \
-  -H "Authorization: Bearer <TOKEN>"
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Server won't start
-- Check MongoDB connection: `MONGO_URI` in `.env`
-- Verify port 3000 is not in use: `lsof -i :3000`
-- Check Node.js version: `node --version`
-
-### "Insufficient funds" error with valid balance
-- Verify ledger entries: `db.ledgers.find({account: ObjectId("...")}).pretty()`
-- Check transaction status: `db.transactions.find({}).pretty()`
-- Trace balance calculation by adding logs to `account.model.js` `getBalance()` method
-
-### Email not sending
-- If `DISABLE_EMAILS=true` in `.env`, emails are intentionally suppressed — check console logs instead
-- Verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` are set correctly in `.env`
-- For Gmail: use an app-specific password (not your account password); enable 2FA first
-- Check `[Email]` prefixed lines in server console output
-
-### Rate limit hit unexpectedly
-- Default limits: auth routes 20 req / 15 min, transfer 30 req / 15 min
-- Adjust `AUTH_RATE_LIMIT_MAX` / `TRANSFER_RATE_LIMIT_MAX` in `.env` for development
-- The `RateLimit-Reset` response header tells you when the window resets
-
-### Audit log entries not appearing
-- Confirm MongoDB is reachable — the middleware writes to the same connection
-- Collection is named `auditlogs` (check with `db.auditlogs.find().pretty()`)
-- Failures are non-fatal; check console for `[AuditLog] Failed to write` messages
-
-### MongoDB connection timeout
-- Ensure MongoDB is running locally or Atlas cluster is accessible
-- Whitelist your IP in MongoDB Atlas
-- Check network connectivity
-
----
-
-## 📞 Support & Contact
-
-For issues, questions, or contributions:
-- GitHub Issues: [Create an issue](https://github.com/Ywatch15/Bank-Transaction-Sys/issues)
-- Email: [Project Owner](mailto:ywatch15@example.com)
+- **Amount filter auto-swap** — `minAmount > maxAmount` now auto-swaps instead of returning an error
+- **Admin dashboard** — Fixed broken freeze/unfreeze (correct API routes, POST method, response parsing)
+- **Account status** — Fixed `account.isFrozen` (non-existent field) → `account.status === "FROZEN"` across all components
+- **JWT `isAdmin` claim** — Admin flag now included in JWT payload for both register and login
+- **Account detail route** — Added `GET /api/account/:accountId` endpoint (was returning 404)
+- **Admin list accounts** — Added `GET /api/admin/accounts` endpoint with user population
+- **Token blacklist TTL** — Fixed `expiredAfterSeconds` → `expireAfterSeconds` (MongoDB spelling)
+- **Auth null check** — Returns 401 if JWT user no longer exists in database
+- **Cookie security** — Production-safe httpOnly/secure/sameSite cookie options
+- **Audit middleware** — Rewritten to use `res.on('finish')` so `req.user` is populated
+- **Profile address** — Supports both string and `{street, city, country}` object input (flattened to string)
+- **Balance consistency** — Uses denormalized `account.balance` instead of aggregation for reads
+- **TransferForm** — Fixed response parsing (`data.data.transaction` not `data.transaction`)
+- **TransferModal** — Fixed `formatCurrency` receiving string instead of number
+- **MobileNav** — Wired up with state management (was rendered with no props)
+- **Header** — Added mobile hamburger button for small screens
+- **Tailwind** — Added missing `debit-400` and `credit-400` color shades
+- **ErrorBoundary** — Converted to dark theme to match app styling
+- **Currency** — All amounts display in ₹ (Indian Rupee) format
 
 ---
 
 ## 📄 License
 
-ISC License - See package.json for details
-
----
-
-**Last Updated:** February 21, 2026  
-**Version:** 1.1.0  
-**Author:** Ywatch15
+This project is for educational and demonstration purposes.

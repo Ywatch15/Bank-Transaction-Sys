@@ -51,6 +51,7 @@ export default {
           100: '#dcfce7',
           200: '#bbf7d0',
           300: '#86efac',
+          400: '#4ade80',
           500: '#22c55e',
           600: '#1f8a4c', // Primary soft green
           700: '#15803d',
@@ -62,6 +63,7 @@ export default {
           100: '#fee2e2',
           200: '#fecaca',
           300: '#fca5a5',
+          400: '#f87171',
           500: '#ef4444',
           600: '#bf3b3b', // Primary soft red
           700: '#b91c1c',

@@ -29,16 +29,16 @@ export default class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
+        <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4">
           <div className="max-w-md text-center space-y-4">
-            <h1 className="text-2xl font-bold text-neutral-900">
+            <h1 className="text-2xl font-bold text-gray-100">
               Something went wrong
             </h1>
-            <p className="text-neutral-600 text-sm">
+            <p className="text-gray-400 text-sm">
               An unexpected error occurred. Please reload the page.
             </p>
             {process.env.NODE_ENV !== "production" && this.state.error && (
-              <pre className="mt-4 max-h-40 overflow-auto rounded bg-neutral-100 p-3 text-left text-xs text-red-700">
+              <pre className="mt-4 max-h-40 overflow-auto rounded bg-gray-900 p-3 text-left text-xs text-red-400">
                 {this.state.error.toString()}
               </pre>
             )}

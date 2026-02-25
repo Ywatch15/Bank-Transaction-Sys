@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Header from "./components/Header.jsx";
@@ -31,10 +31,12 @@ function PageSpinner() {
 }
 
 export default function App() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
-      <MobileNav />
+      <Header onMobileNavOpen={() => setMobileNavOpen(true)} />
+      <MobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <Toast />
 
       {/* Main content area */}

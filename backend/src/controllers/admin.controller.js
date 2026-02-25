@@ -125,4 +125,26 @@ async function unfreezeAccount(req, res) {
   }
 }
 
-module.exports = { freezeAccount, unfreezeAccount };
+/**
+ * GET /api/admin/accounts
+ * List ALL accounts across all users (admin only).
+ * Populates user name/email for the admin table.
+ */
+async function getAllAccounts(req, res) {
+  try {
+    if (!req.user || !req.user._id) {
+      return errorResponse(res, 401, 'unauthorized', 'Authentication required.');
+    }
+
+    const accounts = await accountModel.find({})
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+
+    return successResponse(res, { accounts }, 200);
+  } catch (err) {
+    console.error("[Admin] getAllAccounts error:", err.message);
+    return errorResponse(res, 500, 'server_error', 'Failed to load accounts.');
+  }
+}
+
+module.exports = { freezeAccount, unfreezeAccount, getAllAccounts };

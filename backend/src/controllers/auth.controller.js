@@ -5,6 +5,17 @@ const emailService = require("../services/email.service")
 const tokenBlackListModel = require("../models/blackList.model");
 const { validationResult } = require("express-validator");
 
+/** Cookie options — secure in production, httpOnly always */
+function cookieOptions() {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'strict' : 'lax',
+    maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days (matches JWT expiry)
+  };
+}
+
 
 /**
  * - user register controller
@@ -43,10 +54,11 @@ async function userRegisterController(req,res){
     });
 
     const token = jwt.sign({
-        userId:user._id
+        userId:user._id,
+        isAdmin: false
     }, process.env.JWT_SECRET, {expiresIn:"3d"});
 
-    res.cookie("token", token);
+    res.cookie("token", token, cookieOptions());
 
     res.status(201).json({
         user:{
@@ -90,11 +102,14 @@ async function userLoginController(req,res){
         })
     }
 
+    // Include isAdmin in JWT so the frontend can check without extra API calls
+    const userWithAdmin = await userModel.findById(user._id).select("+isAdmin");
     const token = jwt.sign({
-        userId:user._id
+        userId:user._id,
+        isAdmin: userWithAdmin?.isAdmin === true
     }, process.env.JWT_SECRET, {expiresIn:"3d"});
 
-    res.cookie("token", token);
+    res.cookie("token", token, cookieOptions());
 
     res.status(200).json({
         user:{

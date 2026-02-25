@@ -529,11 +529,13 @@ async function buildTransactionQuery(req) {
 
     // REQUIREMENT #5: Validate and apply amount range filter
     if (minAmount !== undefined || maxAmount !== undefined) {
-        const min = minAmount !== undefined ? validatePositiveAmount(minAmount) : undefined;
-        const max = maxAmount !== undefined ? validatePositiveAmount(maxAmount) : undefined;
+        let min = minAmount !== undefined ? validatePositiveAmount(minAmount) : undefined;
+        let max = maxAmount !== undefined ? validatePositiveAmount(maxAmount) : undefined;
 
-        // REQUIREMENT #6: Validate min <= max constraint
-        validateAmountRange(min, max);
+        // REQUIREMENT #6: Auto-swap if min > max (user-friendly filter behavior)
+        const swapped = validateAmountRange(min, max);
+        min = swapped.min;
+        max = swapped.max;
 
         filter.amount = {};
         if (min !== undefined) filter.amount.$gte = min;

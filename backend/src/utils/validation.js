@@ -89,8 +89,10 @@ function parseAndValidatePagination(page, limit, maxLimit) {
  */
 function validateAmountRange(min, max) {
   if (min !== undefined && max !== undefined && min > max) {
-    throw new Error(`Invalid amount range: minAmount (${min}) must be <= maxAmount (${max})`);
+    // Auto-swap instead of rejecting — user-friendly for filter queries
+    return { min: max, max: min };
   }
+  return { min, max };
 }
 
 /**

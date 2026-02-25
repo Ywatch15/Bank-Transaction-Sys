@@ -1,11 +1,17 @@
 const express = require("express");
 const authMiddleware = require("../middleware/auth.middleware");
-const { freezeAccount, unfreezeAccount } = require("../controllers/admin.controller");
+const { freezeAccount, unfreezeAccount, getAllAccounts } = require("../controllers/admin.controller");
 
 const router = express.Router();
 
 // All admin routes require admin privileges.
 router.use(authMiddleware.authAdminMiddleware);
+
+/**
+ * GET /api/admin/accounts
+ * List all accounts across all users (admin view with owner info).
+ */
+router.get("/accounts", getAllAccounts);
 
 /**
  * POST /api/admin/accounts/:accountId/freeze

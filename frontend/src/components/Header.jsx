@@ -9,7 +9,7 @@ import { useToast } from "../context/ToastContext";
 import { isAdmin } from "../lib/auth";
 import { motion } from "framer-motion";
 
-export default function Header() {
+export default function Header({ onMobileNavOpen }) {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -25,12 +25,28 @@ export default function Header() {
     <header className="sticky top-0 z-40 border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-lg">
       <nav className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/dashboard" className="flex items-center gap-2.5 font-bold shrink-0">
+        <Link
+          to="/dashboard"
+          className="flex items-center gap-2.5 font-bold shrink-0"
+        >
           <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
             B
           </div>
-          <span className="hidden sm:inline text-lg font-bold text-white tracking-tight">BankSys</span>
+          <span className="hidden sm:inline text-lg font-bold text-white tracking-tight">
+            BankSys
+          </span>
         </Link>
+
+        {/* Mobile hamburger button */}
+        <button
+          onClick={onMobileNavOpen}
+          className="md:hidden p-2 text-gray-400 hover:text-white transition-colors rounded-lg"
+          aria-label="Open navigation menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-1 bg-gray-800/60 rounded-lg px-1 py-1">

@@ -81,7 +81,7 @@ export default function TransferForm({
         idempotencyKey: generateIdempotencyKey(),
       });
       showToast("Transfer completed successfully!", "success");
-      onSuccess?.(data.transaction);
+      onSuccess?.(data.data?.transaction ?? data.transaction);
       onClose?.();
     } catch (err) {
       // Handle both successResponse error format and legacy format

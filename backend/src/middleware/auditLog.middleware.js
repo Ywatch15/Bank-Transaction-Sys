@@ -3,28 +3,26 @@ const auditLogModel = require("../models/auditLog.model");
 /**
  * auditLogMiddleware
  * Logs each incoming request to the `audit_logs` (auditLog) collection.
- * Runs asynchronously — failures do NOT interrupt the request.
+ * Uses res.on('finish') so that req.user is available after auth middleware runs.
+ * Failures do NOT interrupt the request.
  *
  * Safe fields captured: userId, ip, method, route, meta.
  * Never stores passwords, raw tokens, or card data.
  */
-async function auditLogMiddleware(req, _res, next) {
-  try {
-    // Build a small, safe metadata snapshot from the request body.
-    // Only include non-sensitive business fields.
+function auditLogMiddleware(req, res, next) {
+  // Log AFTER the response is sent so req.user is populated by auth middleware
+  res.on('finish', () => {
     const meta = buildMeta(req);
-
-    await auditLogModel.create({
+    auditLogModel.create({
       userId: req.user?._id ?? null,
       ip: req.ip || req.connection?.remoteAddress || null,
       method: req.method,
       route: req.originalUrl,
       meta,
+    }).catch((err) => {
+      console.error("[AuditLog] Failed to write audit entry:", err.message);
     });
-  } catch (err) {
-    // Audit failures are non-fatal — log to console only.
-    console.error("[AuditLog] Failed to write audit entry:", err.message);
-  }
+  });
   return next();
 }
 
