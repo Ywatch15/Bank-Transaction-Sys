@@ -7,9 +7,7 @@ import { useAccounts } from "../hooks/useAccounts";
 import { useTransactions } from "../hooks/useTransactions";
 import { useAuth } from "../hooks/useAuth";
 import AccountCard from "../components/AccountCard";
-import LedgerTable, {
-  getDefaultLedgerColumns,
-} from "../components/LedgerTable";
+import TransactionList from "../components/TransactionList";
 import TransferModal from "../components/TransferModal";
 import { formatCurrency } from "../lib/format";
 import { motion } from "framer-motion";
@@ -157,12 +155,16 @@ export default function Dashboard() {
             View All →
           </a>
         </div>
-        <LedgerTable
-          data={transactions}
-          columns={getDefaultLedgerColumns()}
-          isLoading={transLoading}
-          striped
-        />
+        {transLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+          </div>
+        ) : (
+          <TransactionList
+            transactions={transactions}
+            userAccountIds={new Set(accounts.map((a) => String(a._id)))}
+          />
+        )}
       </motion.section>
 
       {/* Transfer Modal */}
