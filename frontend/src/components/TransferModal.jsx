@@ -17,14 +17,19 @@ function TransferModal({
   onSuccess = () => {},
 }) {
   const [toAccountId, setToAccountId] = useState("");
+  const [manualId, setManualId] = useState("");
+  const [inputMode, setInputMode] = useState("select"); // 'select' or 'manual'
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [step, setStep] = useState("form"); // 'form' or 'confirm'
   const { execute, loading } = useCreateTransfer();
 
+  const otherAccounts = accounts.filter((a) => a._id !== fromAccount?._id);
+  const effectiveToId = inputMode === "manual" ? manualId.trim() : toAccountId;
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!toAccountId || !amount) {
+    if (!effectiveToId || !amount) {
       alert("Please fill in all fields");
       return;
     }
@@ -39,7 +44,7 @@ function TransferModal({
       return;
     }
     // Prevent same-account transfer
-    if (toAccountId === fromAccount?._id) {
+    if (effectiveToId === fromAccount?._id) {
       alert("Source and destination accounts must be different");
       return;
     }
@@ -48,8 +53,9 @@ function TransferModal({
 
   const handleConfirm = async () => {
     try {
-      await execute(fromAccount._id, toAccountId, parseFloat(amount), note);
+      await execute(fromAccount._id, effectiveToId, parseFloat(amount), note);
       setToAccountId("");
+      setManualId("");
       setAmount("");
       setNote("");
       setStep("form");
@@ -60,7 +66,7 @@ function TransferModal({
     }
   };
 
-  const toAccount = accounts.find((a) => a._id === toAccountId);
+  const toAccount = accounts.find((a) => a._id === effectiveToId);
 
   return (
     <Transition appear show={isOpen} as={React.Fragment}>
@@ -112,30 +118,66 @@ function TransferModal({
                         </div>
                       </div>
 
-                      {/* To Account */}
+                      {/* To Account — dual mode: dropdown or manual ID */}
                       <div>
-                        <label
-                          htmlFor="to-account"
-                          className="block text-xs font-medium text-gray-400 mb-1"
-                        >
-                          To Account
-                        </label>
-                        <select
-                          id="to-account"
-                          value={toAccountId}
-                          onChange={(e) => setToAccountId(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-700 bg-gray-800 text-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
-                          required
-                        >
-                          <option value="">Select account...</option>
-                          {accounts
-                            .filter((a) => a._id !== fromAccount?._id)
-                            .map((a) => (
-                              <option key={a._id} value={a._id}>
-                                {a.numberMasked} ({a.currency})
-                              </option>
-                            ))}
-                        </select>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-medium text-gray-400">
+                            To Account
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInputMode((m) => m === "select" ? "manual" : "select");
+                              setToAccountId("");
+                              setManualId("");
+                            }}
+                            className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+                          >
+                            {inputMode === "select" ? "Enter ID manually" : "Select from my accounts"}
+                          </button>
+                        </div>
+
+                        {inputMode === "select" ? (
+                          <>
+                            <select
+                              id="to-account"
+                              value={toAccountId}
+                              onChange={(e) => setToAccountId(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-700 bg-gray-800 text-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                              required
+                            >
+                              <option value="">Select account...</option>
+                              {otherAccounts.map((a) => (
+                                <option key={a._id} value={a._id}>
+                                  {a.currency} ···{String(a._id).slice(-6)}{" "}
+                                  (Bal: {formatCurrency(a.balance, a.currency)})
+                                </option>
+                              ))}
+                            </select>
+                            {otherAccounts.length === 0 && (
+                              <p className="mt-1 text-xs text-amber-400">
+                                No other accounts found.{" "}
+                                <button
+                                  type="button"
+                                  onClick={() => setInputMode("manual")}
+                                  className="underline text-brand-400"
+                                >
+                                  Enter an account ID manually
+                                </button>
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <input
+                            id="to-account-manual"
+                            type="text"
+                            value={manualId}
+                            onChange={(e) => setManualId(e.target.value)}
+                            placeholder="Paste destination account ID"
+                            className="w-full px-3 py-2 border border-gray-700 bg-gray-800 text-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono"
+                            required
+                          />
+                        )}
                       </div>
 
                       {/* Amount */}
@@ -210,8 +252,10 @@ function TransferModal({
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">To:</span>
-                        <span className="font-medium text-gray-200">
-                          {toAccount?.numberMasked}
+                        <span className="font-medium text-gray-200 font-mono">
+                          {toAccount
+                            ? `${toAccount.currency} ···${String(toAccount._id).slice(-6)}`
+                            : `···${effectiveToId.slice(-8)}`}
                         </span>
                       </div>
                       <div className="border-t border-gray-700 pt-3 flex justify-between text-sm font-semibold">
