@@ -10,7 +10,7 @@
  * NEVER log tokens to the console in production code.
  */
 
-const TOKEN_KEY = 'bts_auth_token';
+const TOKEN_KEY = "bts_auth_token";
 
 /** Persist token after login */
 export function setToken(token) {
@@ -34,9 +34,11 @@ export function clearToken() {
  */
 export function decodeToken(token) {
   try {
-    const payload = token.split('.')[1];
+    const payload = token.split(".")[1];
     // atob decodes base64; add padding if needed
-    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    const decoded = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/")),
+    );
     // Check expiry
     if (decoded.exp && decoded.exp * 1000 < Date.now()) {
       return null; // expired

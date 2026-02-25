@@ -1,4 +1,5 @@
 const userModel = require("../models/user.model");
+const accountModel = require("../models/account.model");
 const jwt = require("jsonwebtoken");
 const emailService = require("../services/email.service")
 const tokenBlackListModel = require("../models/blackList.model");
@@ -32,6 +33,14 @@ async function userRegisterController(req,res){
     const user = await userModel.create({
         email, password, name
     })
+
+    // Create a default INR account with ₹4000 starter balance for new users
+    await accountModel.create({
+        user: user._id,
+        currency: "INR",
+        balance: 4000,
+        status: "ACTIVE",
+    });
 
     const token = jwt.sign({
         userId:user._id

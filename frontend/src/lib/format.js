@@ -11,12 +11,12 @@
  * @param {string} locale - BCP 47 locale tag (default: 'en-US')
  * @returns {string} formatted currency string, e.g. "$1,234.56"
  */
-export function formatCurrency(amount, currency = 'USD', locale = 'en-US') {
-  if (typeof amount !== 'number' || isNaN(amount)) {
-    return '–';
+export function formatCurrency(amount, currency = "USD", locale = "en-US") {
+  if (typeof amount !== "number" || isNaN(amount)) {
+    return "–";
   }
   return new Intl.NumberFormat(locale, {
-    style: 'currency',
+    style: "currency",
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -30,11 +30,11 @@ export function formatCurrency(amount, currency = 'USD', locale = 'en-US') {
  * @param {string} currency
  * @returns {string} e.g. "+$500.00" or "-$200.50"
  */
-export function formatSignedAmount(amount, currency = 'USD') {
-  if (typeof amount !== 'number' || isNaN(amount)) {
-    return '–';
+export function formatSignedAmount(amount, currency = "USD") {
+  if (typeof amount !== "number" || isNaN(amount)) {
+    return "–";
   }
-  const sign = amount >= 0 ? '+' : '';
+  const sign = amount >= 0 ? "+" : "";
   return sign + formatCurrency(Math.abs(amount), currency);
 }
 
@@ -43,14 +43,14 @@ export function formatSignedAmount(amount, currency = 'USD') {
  * @param {Date|string|number} date
  * @returns {string}
  */
-export function formatDate(date, locale = 'en-US') {
-  if (!date) return '–';
+export function formatDate(date, locale = "en-US") {
+  if (!date) return "–";
   const d = new Date(date);
-  if (isNaN(d.getTime())) return '–';
+  if (isNaN(d.getTime())) return "–";
   return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   }).format(d);
 }
 
@@ -59,16 +59,16 @@ export function formatDate(date, locale = 'en-US') {
  * @param {Date|string|number} date
  * @returns {string}
  */
-export function formatDateTime(date, locale = 'en-US') {
-  if (!date) return '–';
+export function formatDateTime(date, locale = "en-US") {
+  if (!date) return "–";
   const d = new Date(date);
-  if (isNaN(d.getTime())) return '–';
+  if (isNaN(d.getTime())) return "–";
   return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(d);
 }
 
@@ -79,10 +79,10 @@ export function formatDateTime(date, locale = 'en-US') {
  * @returns {string}
  */
 export function maskAccountNumber(accountNumber, showLast = 4) {
-  if (!accountNumber) return '–';
+  if (!accountNumber) return "–";
   const str = String(accountNumber);
   if (str.length <= showLast) return str;
-  return '*'.repeat(str.length - showLast) + str.slice(-showLast);
+  return "*".repeat(str.length - showLast) + str.slice(-showLast);
 }
 
 /**
@@ -113,10 +113,10 @@ export function parseISODate(isoDate) {
  * @returns {string} e.g. "5.23%"
  */
 export function formatPercent(value, decimals = 2) {
-  if (typeof value !== 'number' || isNaN(value)) {
-    return '–';
+  if (typeof value !== "number" || isNaN(value)) {
+    return "–";
   }
-  return (value * 100).toFixed(decimals) + '%';
+  return (value * 100).toFixed(decimals) + "%";
 }
 
 /**
@@ -125,7 +125,7 @@ export function formatPercent(value, decimals = 2) {
  * @returns {string} - Titlecase, e.g. "Transfer"
  */
 export function formatTransactionType(type) {
-  if (!type) return '–';
+  if (!type) return "–";
   return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
 }
 

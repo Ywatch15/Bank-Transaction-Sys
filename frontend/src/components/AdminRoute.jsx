@@ -3,10 +3,10 @@
  * Extends ProtectedRoute — also requires user.isAdmin === true.
  * Non-admins are redirected to /unauthorized.
  */
-import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { isAdmin } from '../lib/auth.js';
+import React from "react";
+import { Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+import { isAdmin } from "../lib/auth.js";
 
 export default function AdminRoute() {
   const { user, loading } = useAuth();
@@ -26,12 +26,6 @@ export default function AdminRoute() {
   if (!isAdmin(user)) {
     return <Navigate to="/unauthorized" replace />;
   }
-
-  return <Outlet />;
-}
-
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isAdmin(user)) return <Navigate to="/unauthorized" replace />;
 
   return <Outlet />;
 }

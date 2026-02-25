@@ -6,19 +6,19 @@
  *   onChange(filters) — called on any change
  *   onReset() — called when user resets filters
  */
-import React from 'react';
+import React from "react";
 
 const SORT_OPTIONS = [
-  { value: 'createdAt:desc', label: 'Newest first' },
-  { value: 'createdAt:asc',  label: 'Oldest first' },
-  { value: 'amount:desc',    label: 'Amount (high → low)' },
-  { value: 'amount:asc',     label: 'Amount (low → high)' },
+  { value: "createdAt:desc", label: "Newest first" },
+  { value: "createdAt:asc", label: "Oldest first" },
+  { value: "amount:desc", label: "Amount (high → low)" },
+  { value: "amount:asc", label: "Amount (low → high)" },
 ];
 
 const TYPE_OPTIONS = [
-  { value: '',       label: 'All types' },
-  { value: 'credit', label: 'Credit (received)' },
-  { value: 'debit',  label: 'Debit (sent)' },
+  { value: "", label: "All types" },
+  { value: "credit", label: "Credit (received)" },
+  { value: "debit", label: "Debit (sent)" },
 ];
 
 export default function FilterBar({ filters, onChange, onReset }) {
@@ -32,7 +32,9 @@ export default function FilterBar({ filters, onChange, onReset }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {/* Start date */}
         <div>
-          <label htmlFor="startDate" className="label">From</label>
+          <label htmlFor="startDate" className="label">
+            From
+          </label>
           <input
             id="startDate"
             name="startDate"
@@ -45,7 +47,9 @@ export default function FilterBar({ filters, onChange, onReset }) {
 
         {/* End date */}
         <div>
-          <label htmlFor="endDate" className="label">To</label>
+          <label htmlFor="endDate" className="label">
+            To
+          </label>
           <input
             id="endDate"
             name="endDate"
@@ -58,17 +62,29 @@ export default function FilterBar({ filters, onChange, onReset }) {
 
         {/* Type */}
         <div>
-          <label htmlFor="type" className="label">Type</label>
-          <select id="type" name="type" value={filters.type} onChange={handle} className="input-field">
+          <label htmlFor="type" className="label">
+            Type
+          </label>
+          <select
+            id="type"
+            name="type"
+            value={filters.type}
+            onChange={handle}
+            className="input-field"
+          >
             {TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
             ))}
           </select>
         </div>
 
         {/* Min amount */}
         <div>
-          <label htmlFor="minAmount" className="label">Min Amount</label>
+          <label htmlFor="minAmount" className="label">
+            Min Amount
+          </label>
           <input
             id="minAmount"
             name="minAmount"
@@ -84,7 +100,9 @@ export default function FilterBar({ filters, onChange, onReset }) {
 
         {/* Max amount */}
         <div>
-          <label htmlFor="maxAmount" className="label">Max Amount</label>
+          <label htmlFor="maxAmount" className="label">
+            Max Amount
+          </label>
           <input
             id="maxAmount"
             name="maxAmount"
@@ -100,10 +118,20 @@ export default function FilterBar({ filters, onChange, onReset }) {
 
         {/* Sort */}
         <div>
-          <label htmlFor="sort" className="label">Sort</label>
-          <select id="sort" name="sort" value={filters.sort} onChange={handle} className="input-field">
+          <label htmlFor="sort" className="label">
+            Sort
+          </label>
+          <select
+            id="sort"
+            name="sort"
+            value={filters.sort}
+            onChange={handle}
+            className="input-field"
+          >
             {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
             ))}
           </select>
         </div>

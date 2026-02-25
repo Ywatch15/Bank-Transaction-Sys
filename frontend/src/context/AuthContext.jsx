@@ -8,9 +8,20 @@
  *   - PRODUCTION: Use httpOnly cookies set by backend. Disable token interceptor
  *     in api.js and rely on `withCredentials: true` for automatic cookie inclusion.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getToken, setToken, clearToken, decodeToken } from '../lib/auth.js';
-import { fetchProfileAPI, loginAPI, registerAPI, logoutAPI } from '../lib/api.js';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import { getToken, setToken, clearToken, decodeToken } from "../lib/auth.js";
+import {
+  fetchProfileAPI,
+  loginAPI,
+  registerAPI,
+  logoutAPI,
+} from "../lib/api.js";
 
 const AuthContext = createContext(null);
 
@@ -21,7 +32,7 @@ export function AuthProvider({ children }) {
   // On mount: restore session from stored token
   useEffect(() => {
     let cancelled = false;
-    
+
     const token = getToken();
     if (token) {
       const decoded = decodeToken(token);
@@ -50,7 +61,7 @@ export function AuthProvider({ children }) {
     } else {
       setLoading(false);
     }
-    
+
     // Cleanup: mark as cancelled if component unmounts before promise resolves
     return () => {
       cancelled = true;
@@ -86,6 +97,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }

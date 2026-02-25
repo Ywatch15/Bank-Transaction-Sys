@@ -12,35 +12,43 @@
  *   onSuccess(txn)  — callback after successful transfer
  *   onClose()       — close modal/form
  */
-import React, { useState } from 'react';
-import api, { API_ROUTES } from '../lib/api.js';
-import { useToast } from '../context/ToastContext.jsx';
+import React, { useState } from "react";
+import api, { API_ROUTES } from "../lib/api.js";
+import { useToast } from "../context/ToastContext.jsx";
 
 function generateIdempotencyKey() {
   // Simple random key — good enough for client-generated idempotency
   return `txn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export default function TransferForm({ accounts = [], defaultFromId = '', onSuccess, onClose }) {
+export default function TransferForm({
+  accounts = [],
+  defaultFromId = "",
+  onSuccess,
+  onClose,
+}) {
   const { showToast } = useToast();
 
   const [form, setForm] = useState({
-    fromAccount: defaultFromId || accounts[0]?._id || '',
-    toAccount:   '',
-    amount:      '',
+    fromAccount: defaultFromId || accounts[0]?._id || "",
+    toAccount: "",
+    amount: "",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   function validate() {
     const e = {};
-    if (!form.fromAccount) e.fromAccount = 'Select source account.';
-    if (!form.toAccount)   e.toAccount = 'Enter destination account ID.';
-    if (form.fromAccount === form.toAccount) e.toAccount = 'Source and destination cannot be the same.';
+    if (!form.fromAccount) e.fromAccount = "Select source account.";
+    if (!form.toAccount) e.toAccount = "Enter destination account ID.";
+    if (form.fromAccount === form.toAccount)
+      e.toAccount = "Source and destination cannot be the same.";
     const amt = parseFloat(form.amount);
-    if (!form.amount || isNaN(amt) || amt <= 0) e.amount = 'Enter a positive amount.';
+    if (!form.amount || isNaN(amt) || amt <= 0)
+      e.amount = "Enter a positive amount.";
     // Enforce max 2 decimal places client-side to match backend validation
-    else if (form.amount.includes('.') && form.amount.split('.')[1]?.length > 2) e.amount = 'Max 2 decimal places allowed.';
+    else if (form.amount.includes(".") && form.amount.split(".")[1]?.length > 2)
+      e.amount = "Max 2 decimal places allowed.";
     return e;
   }
 
@@ -53,11 +61,14 @@ export default function TransferForm({ accounts = [], defaultFromId = '', onSucc
   async function handleSubmit(e) {
     e.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
 
     const fromAccount = accounts.find((a) => a._id === form.fromAccount);
-    if (fromAccount?.status !== 'ACTIVE') {
-      setErrors({ fromAccount: 'Source account is not active.' });
+    if (fromAccount?.status !== "ACTIVE") {
+      setErrors({ fromAccount: "Source account is not active." });
       return;
     }
 
@@ -65,50 +76,65 @@ export default function TransferForm({ accounts = [], defaultFromId = '', onSucc
     try {
       const { data } = await api.post(API_ROUTES.transactions, {
         fromAccount: form.fromAccount,
-        toAccount:   form.toAccount,
-        amount:      parseFloat(form.amount),
+        toAccount: form.toAccount,
+        amount: parseFloat(form.amount),
         idempotencyKey: generateIdempotencyKey(),
       });
-      showToast('Transfer completed successfully!', 'success');
+      showToast("Transfer completed successfully!", "success");
       onSuccess?.(data.transaction);
       onClose?.();
     } catch (err) {
       // Handle both successResponse error format and legacy format
-      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.error || 'Transfer failed.';
-      showToast(msg, 'error');
+      const msg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "Transfer failed.";
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
   }
 
-  const activeAccounts = accounts.filter((a) => a.status === 'ACTIVE');
+  const activeAccounts = accounts.filter((a) => a.status === "ACTIVE");
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {/* From account */}
       <div>
-        <label htmlFor="fromAccount" className="label">From Account</label>
+        <label htmlFor="fromAccount" className="label">
+          From Account
+        </label>
         <select
           id="fromAccount"
           name="fromAccount"
           value={form.fromAccount}
           onChange={handleChange}
           className="input-field"
-          aria-describedby={errors.fromAccount ? 'fromAccount-err' : undefined}
+          aria-describedby={errors.fromAccount ? "fromAccount-err" : undefined}
         >
-          <option value="" disabled>Select account...</option>
+          <option value="" disabled>
+            Select account...
+          </option>
           {activeAccounts.map((a) => (
             <option key={a._id} value={a._id}>
-              {a.currency} ···{String(a._id).slice(-6)} (Balance: {a.balance ?? '—'})
+              {a.currency} ···{String(a._id).slice(-6)} (Balance:{" "}
+              {a.balance ?? "—"})
             </option>
           ))}
         </select>
-        {errors.fromAccount && <p id="fromAccount-err" className="mt-1 text-xs text-red-400">{errors.fromAccount}</p>}
+        {errors.fromAccount && (
+          <p id="fromAccount-err" className="mt-1 text-xs text-red-400">
+            {errors.fromAccount}
+          </p>
+        )}
       </div>
 
       {/* To account ID */}
       <div>
-        <label htmlFor="toAccount" className="label">To Account ID</label>
+        <label htmlFor="toAccount" className="label">
+          To Account ID
+        </label>
         <input
           id="toAccount"
           name="toAccount"
@@ -117,14 +143,20 @@ export default function TransferForm({ accounts = [], defaultFromId = '', onSucc
           onChange={handleChange}
           placeholder="Paste destination account ID"
           className="input-field font-mono text-xs"
-          aria-describedby={errors.toAccount ? 'toAccount-err' : undefined}
+          aria-describedby={errors.toAccount ? "toAccount-err" : undefined}
         />
-        {errors.toAccount && <p id="toAccount-err" className="mt-1 text-xs text-red-400">{errors.toAccount}</p>}
+        {errors.toAccount && (
+          <p id="toAccount-err" className="mt-1 text-xs text-red-400">
+            {errors.toAccount}
+          </p>
+        )}
       </div>
 
       {/* Amount */}
       <div>
-        <label htmlFor="amount" className="label">Amount</label>
+        <label htmlFor="amount" className="label">
+          Amount
+        </label>
         <input
           id="amount"
           name="amount"
@@ -135,17 +167,25 @@ export default function TransferForm({ accounts = [], defaultFromId = '', onSucc
           onChange={handleChange}
           placeholder="0.00"
           className="input-field"
-          aria-describedby={errors.amount ? 'amount-err' : undefined}
+          aria-describedby={errors.amount ? "amount-err" : undefined}
         />
-        {errors.amount && <p id="amount-err" className="mt-1 text-xs text-red-400">{errors.amount}</p>}
+        {errors.amount && (
+          <p id="amount-err" className="mt-1 text-xs text-red-400">
+            {errors.amount}
+          </p>
+        )}
       </div>
 
       {/* Actions */}
       <div className="flex gap-3 pt-1">
         <button type="submit" disabled={loading} className="btn-primary flex-1">
-          {loading ? 'Sending…' : 'Transfer'}
+          {loading ? "Sending…" : "Transfer"}
         </button>
-        <button type="button" onClick={onClose} className="btn-secondary flex-1">
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-secondary flex-1"
+        >
           Cancel
         </button>
       </div>

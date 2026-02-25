@@ -4,7 +4,7 @@
  * Wraps the app to prevent white-screen crashes.
  * Shows a user-friendly fallback with a reload button.
  */
-import React from 'react';
+import React from "react";
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -18,7 +18,7 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // Log to console only — no external service configured
-    console.warn('[ErrorBoundary] Uncaught render error:', error, errorInfo);
+    console.warn("[ErrorBoundary] Uncaught render error:", error, errorInfo);
   }
 
   handleReload = () => {
@@ -31,11 +31,13 @@ export default class ErrorBoundary extends React.Component {
       return (
         <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
           <div className="max-w-md text-center space-y-4">
-            <h1 className="text-2xl font-bold text-neutral-900">Something went wrong</h1>
+            <h1 className="text-2xl font-bold text-neutral-900">
+              Something went wrong
+            </h1>
             <p className="text-neutral-600 text-sm">
               An unexpected error occurred. Please reload the page.
             </p>
-            {process.env.NODE_ENV !== 'production' && this.state.error && (
+            {process.env.NODE_ENV !== "production" && this.state.error && (
               <pre className="mt-4 max-h-40 overflow-auto rounded bg-neutral-100 p-3 text-left text-xs text-red-700">
                 {this.state.error.toString()}
               </pre>

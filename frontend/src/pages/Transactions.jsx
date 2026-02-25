@@ -3,38 +3,45 @@
  * Full transaction history: FilterBar, TransactionList, pagination, CSV export.
  * Route: /transactions
  */
-import React, { useEffect, useState, useCallback } from 'react';
-import { useToast } from '../context/ToastContext.jsx';
-import api, { API_ROUTES } from '../lib/api.js';
-import FilterBar from '../components/FilterBar.jsx';
-import TransactionList from '../components/TransactionList.jsx';
-import { downloadBlob, csvFilename } from '../lib/download.js';
+import React, { useEffect, useState, useCallback } from "react";
+import { useToast } from "../context/ToastContext.jsx";
+import api, { API_ROUTES } from "../lib/api.js";
+import FilterBar from "../components/FilterBar.jsx";
+import TransactionList from "../components/TransactionList.jsx";
+import { downloadBlob, csvFilename } from "../lib/download.js";
 
 const DEFAULT_FILTERS = {
-  startDate: '', endDate: '', type: '', minAmount: '', maxAmount: '',
-  sort: 'createdAt:desc', page: 1, limit: 20,
+  startDate: "",
+  endDate: "",
+  type: "",
+  minAmount: "",
+  maxAmount: "",
+  sort: "createdAt:desc",
+  page: 1,
+  limit: 20,
 };
 
 export default function Transactions() {
   const { showToast } = useToast();
 
-  const [filters, setFilters]         = useState(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [transactions, setTransactions] = useState([]);
-  const [total, setTotal]             = useState(0);
-  const [loading, setLoading]         = useState(true);
-  const [exporting, setExporting]     = useState(false);
-  const [accounts, setAccounts]       = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [accounts, setAccounts] = useState([]);
 
   // Fetch user accounts once for direction logic
   useEffect(() => {
-    api.get(API_ROUTES.accounts)
+    api
+      .get(API_ROUTES.accounts)
       .then(({ data }) => {
         const list = Array.isArray(data) ? data : (data.accounts ?? []);
         setAccounts(list);
       })
       .catch((err) => {
-        console.error('Failed to load accounts:', err.message);
-        showToast('Failed to load accounts', 'error');
+        console.error("Failed to load accounts:", err.message);
+        showToast("Failed to load accounts", "error");
         setAccounts([]);
       });
   }, [showToast]);
@@ -44,44 +51,48 @@ export default function Transactions() {
     try {
       const params = {};
       if (filters.startDate) params.startDate = filters.startDate;
-      if (filters.endDate)   params.endDate   = filters.endDate;
-      if (filters.type)      params.type      = filters.type;
+      if (filters.endDate) params.endDate = filters.endDate;
+      if (filters.type) params.type = filters.type;
       if (filters.minAmount) params.minAmount = filters.minAmount;
       if (filters.maxAmount) params.maxAmount = filters.maxAmount;
-      if (filters.sort)      params.sort      = filters.sort;
-      params.page  = filters.page;
+      if (filters.sort) params.sort = filters.sort;
+      params.page = filters.page;
       params.limit = filters.limit;
 
       const { data } = await api.get(API_ROUTES.transactions, { params });
       // Backend wraps in successResponse: { success, data: { transactions, meta } }
       const payload = data.data || data;
-      setTransactions(payload.transactions ?? (Array.isArray(payload) ? payload : []));
+      setTransactions(
+        payload.transactions ?? (Array.isArray(payload) ? payload : []),
+      );
       setTotal(payload.meta?.total ?? payload.total ?? 0);
     } catch {
-      showToast('Could not load transactions.', 'error');
+      showToast("Could not load transactions.", "error");
     } finally {
       setLoading(false);
     }
   }, [filters, showToast]);
 
-  useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   async function handleExport() {
     setExporting(true);
     try {
       const params = {};
       if (filters.startDate) params.startDate = filters.startDate;
-      if (filters.endDate)   params.endDate   = filters.endDate;
-      if (filters.sort)      params.sort      = filters.sort;
+      if (filters.endDate) params.endDate = filters.endDate;
+      if (filters.sort) params.sort = filters.sort;
 
       const response = await api.get(API_ROUTES.transactionExport, {
         params,
-        responseType: 'blob',
+        responseType: "blob",
       });
-      downloadBlob(response.data, csvFilename('transactions'), 'text/csv');
-      showToast('CSV downloaded successfully.', 'success');
+      downloadBlob(response.data, csvFilename("transactions"), "text/csv");
+      showToast("CSV downloaded successfully.", "success");
     } catch {
-      showToast('Export failed.', 'error');
+      showToast("Export failed.", "error");
     } finally {
       setExporting(false);
     }
@@ -100,7 +111,7 @@ export default function Transactions() {
           disabled={exporting || loading}
           className="btn-secondary py-1.5 text-xs"
         >
-          {exporting ? 'Exporting…' : 'Export CSV'}
+          {exporting ? "Exporting…" : "Export CSV"}
         </button>
       </div>
 
@@ -120,11 +131,17 @@ export default function Transactions() {
       {loading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-xl bg-gray-800" />
+            <div
+              key={i}
+              className="h-14 animate-pulse rounded-xl bg-gray-800"
+            />
           ))}
         </div>
       ) : (
-        <TransactionList transactions={transactions} userAccountIds={userAccountIds} />
+        <TransactionList
+          transactions={transactions}
+          userAccountIds={userAccountIds}
+        />
       )}
 
       {/* Pagination */}

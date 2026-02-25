@@ -2,9 +2,9 @@
  * Unauthorized.jsx — 403 page
  * Shown when a non-admin user tries to access /admin.
  */
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 
 export default function Unauthorized() {
   return (

@@ -3,23 +3,23 @@
  * View a single account: balance card, transfer form, recent transactions.
  * Route: /accounts/:accountId
  */
-import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useToast } from '../../context/ToastContext.jsx';
-import api, { API_ROUTES } from '../../lib/api.js';
-import TransactionList from '../../components/TransactionList.jsx';
-import TransferForm from '../../components/TransferForm.jsx';
-import clsx from 'clsx';
+import React, { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useToast } from "../../context/ToastContext.jsx";
+import api, { API_ROUTES } from "../../lib/api.js";
+import TransactionList from "../../components/TransactionList.jsx";
+import TransferForm from "../../components/TransferForm.jsx";
+import clsx from "clsx";
 
 export default function AccountDetail() {
   const { accountId } = useParams();
   const { showToast } = useToast();
 
-  const [account, setAccount]     = useState(null);
+  const [account, setAccount] = useState(null);
   const [allAccounts, setAllAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading] = useState(true);
   const [showTransfer, setShowTransfer] = useState(false);
 
   useEffect(() => {
@@ -37,18 +37,25 @@ export default function AccountDetail() {
       ]);
 
       setAccount(balRes.data);
-      const list = Array.isArray(acctRes.data) ? acctRes.data : (acctRes.data.accounts ?? []);
+      const list = Array.isArray(acctRes.data)
+        ? acctRes.data
+        : (acctRes.data.accounts ?? []);
       setAllAccounts(list);
       // Backend wraps in successResponse: { success, data: { transactions, meta } }
       const txnPayload = txnRes.data?.data || txnRes.data;
-      const txns = txnPayload?.transactions ?? (Array.isArray(txnPayload) ? txnPayload : []);
+      const txns =
+        txnPayload?.transactions ??
+        (Array.isArray(txnPayload) ? txnPayload : []);
       // Filter to this account
-      setTransactions(txns.filter((t) =>
-        String(t.fromAccount?._id ?? t.fromAccount) === accountId ||
-        String(t.toAccount?._id   ?? t.toAccount)   === accountId
-      ));
+      setTransactions(
+        txns.filter(
+          (t) =>
+            String(t.fromAccount?._id ?? t.fromAccount) === accountId ||
+            String(t.toAccount?._id ?? t.toAccount) === accountId,
+        ),
+      );
     } catch {
-      showToast('Could not load account details.', 'error');
+      showToast("Could not load account details.", "error");
     } finally {
       setLoading(false);
     }
@@ -67,7 +74,9 @@ export default function AccountDetail() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       {/* Back */}
-      <Link to="/dashboard" className="text-sm text-brand-400 hover:underline">← Back to Dashboard</Link>
+      <Link to="/dashboard" className="text-sm text-brand-400 hover:underline">
+        ← Back to Dashboard
+      </Link>
 
       {/* Account summary card */}
       {account && (
@@ -79,41 +88,51 @@ export default function AccountDetail() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-wide text-gray-500">
-                {account.currency ?? 'INR'} Account
+                {account.currency ?? "INR"} Account
               </p>
               <p className="font-mono text-xs text-gray-600">
                 ···{String(accountId).slice(-8)}
               </p>
             </div>
-            <span className={clsx(
-              account.status === 'ACTIVE' ? 'badge-green' :
-              account.status === 'FROZEN' ? 'badge-yellow' : 'badge-red'
-            )}>
+            <span
+              className={clsx(
+                account.status === "ACTIVE"
+                  ? "badge-green"
+                  : account.status === "FROZEN"
+                    ? "badge-yellow"
+                    : "badge-red",
+              )}
+            >
               {account.status}
             </span>
           </div>
 
           <p className="mt-3 text-3xl font-bold tabular-nums text-white">
-            {account.currency ?? 'INR'}&nbsp;
-            {Number(account.balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            {account.currency ?? "INR"}&nbsp;
+            {Number(account.balance ?? 0).toLocaleString("en-IN", {
+              minimumFractionDigits: 2,
+            })}
           </p>
 
           <div className="mt-4">
             <button
               onClick={() => setShowTransfer((v) => !v)}
-              disabled={account.status !== 'ACTIVE'}
+              disabled={account.status !== "ACTIVE"}
               className="btn-primary"
             >
-              {showTransfer ? 'Cancel Transfer' : 'Transfer Funds'}
+              {showTransfer ? "Cancel Transfer" : "Transfer Funds"}
             </button>
           </div>
 
           {showTransfer && (
             <div className="mt-4 border-t border-gray-800 pt-4">
               <TransferForm
-                accounts={allAccounts.filter((a) => a.status === 'ACTIVE')}
+                accounts={allAccounts.filter((a) => a.status === "ACTIVE")}
                 defaultFromId={accountId}
-                onSuccess={() => { fetchAll(); setShowTransfer(false); }}
+                onSuccess={() => {
+                  fetchAll();
+                  setShowTransfer(false);
+                }}
                 onClose={() => setShowTransfer(false)}
               />
             </div>
@@ -123,10 +142,16 @@ export default function AccountDetail() {
 
       {/* Recent transactions */}
       <section aria-labelledby="recent-txn-heading">
-        <h2 id="recent-txn-heading" className="mb-3 text-base font-semibold text-white">
+        <h2
+          id="recent-txn-heading"
+          className="mb-3 text-base font-semibold text-white"
+        >
           Recent Transactions
         </h2>
-        <TransactionList transactions={transactions} userAccountIds={userAccountIds} />
+        <TransactionList
+          transactions={transactions}
+          userAccountIds={userAccountIds}
+        />
       </section>
     </div>
   );

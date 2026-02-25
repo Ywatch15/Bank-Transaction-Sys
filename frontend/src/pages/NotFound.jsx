@@ -1,9 +1,9 @@
 /**
  * NotFound.jsx — 404 page
  */
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 
 export default function NotFound() {
   return (
@@ -13,7 +13,9 @@ export default function NotFound() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4 }}
       >
-        <p className="text-8xl font-extrabold text-brand-600 select-none">404</p>
+        <p className="text-8xl font-extrabold text-brand-600 select-none">
+          404
+        </p>
         <h1 className="mt-2 text-2xl font-bold text-white">Page not found</h1>
         <p className="mt-2 text-sm text-gray-500">
           The page you are looking for doesn't exist or has been moved.

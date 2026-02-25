@@ -2,9 +2,9 @@
  * useAccounts.js — Hook for fetching and managing accounts
  * Provides cached account data and refetch capability.
  */
-import { useState, useEffect, useCallback } from 'react';
-import api from '../lib/api';
-import { useToast } from '../context/ToastContext';
+import { useState, useEffect, useCallback } from "react";
+import api from "../lib/api";
+import { useToast } from "../context/ToastContext";
 
 export function useAccounts() {
   const [accounts, setAccounts] = useState([]);
@@ -15,12 +15,12 @@ export function useAccounts() {
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/account');
+      const { data } = await api.get("/api/account");
       setAccounts(Array.isArray(data.accounts) ? data.accounts : []);
       setError(null);
     } catch (err) {
       setError(err.message);
-      showToast('Failed to load accounts', 'error');
+      showToast("Failed to load accounts", "error");
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,7 @@ export function useAccountDetail(accountId) {
       setError(null);
     } catch (err) {
       setError(err.message);
-      showToast('Failed to load account', 'error');
+      showToast("Failed to load account", "error");
     } finally {
       setLoading(false);
     }
