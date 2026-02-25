@@ -22,7 +22,7 @@ export default function AccountCard({ account, onTransfer }) {
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-            {account.currency || "USD"} Account
+            {account.currency || "INR"} Account
           </p>
           <p className="mt-1 font-mono text-sm text-gray-300">
             {maskAccountNumber(account.numberMasked || account._id)}

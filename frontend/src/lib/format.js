@@ -7,11 +7,11 @@
 /**
  * Format amount as currency
  * @param {number} amount - The amount to format
- * @param {string} currency - ISO 4217 code (default: 'USD')
- * @param {string} locale - BCP 47 locale tag (default: 'en-US')
- * @returns {string} formatted currency string, e.g. "$1,234.56"
+ * @param {string} currency - ISO 4217 code (default: 'INR')
+ * @param {string} locale - BCP 47 locale tag (default: 'en-IN')
+ * @returns {string} formatted currency string, e.g. "₹1,234.56"
  */
-export function formatCurrency(amount, currency = "USD", locale = "en-US") {
+export function formatCurrency(amount, currency = "INR", locale = "en-IN") {
   if (typeof amount !== "number" || isNaN(amount)) {
     return "–";
   }
@@ -28,9 +28,9 @@ export function formatCurrency(amount, currency = "USD", locale = "en-US") {
  * Used in ledger tables to indicate transaction direction.
  * @param {number} amount
  * @param {string} currency
- * @returns {string} e.g. "+$500.00" or "-$200.50"
+ * @returns {string} e.g. "+₹500.00" or "-₹200.50"
  */
-export function formatSignedAmount(amount, currency = "USD") {
+export function formatSignedAmount(amount, currency = "INR") {
   if (typeof amount !== "number" || isNaN(amount)) {
     return "–";
   }
