@@ -1,0 +1,89 @@
+# ============================================================
+# render.yaml — Render.com Infrastructure-as-Code
+# ============================================================
+# Render reads this file from the repo root.
+# On every push to the target branch, Render auto-deploys.
+#
+# FIRST-TIME SETUP:
+#   1. Go to https://dashboard.render.com → "New" → "Blueprint"
+#   2. Connect this GitHub repo.
+#   3. Render will detect this file and create the service.
+#   4. Fill in secret env vars (marked `sync: false`) in the
+#      Render dashboard under Environment → Secret Files or ENV.
+# ============================================================
+
+services:
+  - type: web
+    name: bank-txn-backend
+    runtime: node
+    # Build & start from the backend sub-directory
+    rootDir: backend
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+
+    # Render will use this path to decide if the deployment
+    # succeeded. Make sure GET /api/health returns HTTP 200.
+    healthCheckPath: /api/health
+
+    # Automatically deploy on every push to "main"
+    autoDeploy: true
+    branch: main
+
+    # ── Environment variables ───────────────────────────────
+    # Values marked `sync: false` are SECRETS — set them once
+    # in the Render dashboard; they are never written here.
+    envVars:
+      # ── Runtime ──────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+
+      # PORT is auto-injected by Render; no need to set it.
+      # server.js reads process.env.PORT || 3000.
+
+      # ── Database ─────────────────────────────────────────
+      - key: MONGO_URI
+        sync: false   # Set in Render dashboard → MongoDB Atlas connection string
+
+      # ── Auth ─────────────────────────────────────────────
+      - key: JWT_SECRET
+        sync: false   # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+      # ── CORS ─────────────────────────────────────────────
+      # Set to your Vercel frontend URL (no trailing slash).
+      # Multiple URLs: https://app.vercel.app,https://preview.vercel.app
+      - key: CORS_ORIGIN
+        sync: false   # e.g. https://bank-txn.vercel.app
+
+      # ── Email ────────────────────────────────────────────
+      # OPTION A (Recommended): Gmail App Password — stable, no token expiry
+      #   1. Enable 2FA on your Google account
+      #   2. Go to https://myaccount.google.com/apppasswords
+      #   3. Create an app password for "Mail"
+      #   4. Set these four vars in the Render dashboard:
+      - key: SMTP_HOST
+        sync: false   # smtp.gmail.com
+      - key: SMTP_PORT
+        sync: false   # 587
+      - key: SMTP_USER
+        sync: false   # your-email@gmail.com
+      - key: SMTP_PASS
+        sync: false   # 16-character app password (no spaces)
+      - key: EMAIL_FROM
+        sync: false   # "Bank System" <your-email@gmail.com>  OR just your-email@gmail.com
+      - key: ADMIN_EMAIL
+        sync: false   # email that receives every transaction alert (can be same as SMTP_USER)
+
+      # OPTION B: Disable emails entirely (safe default for new deployments)
+      # Uncomment the line below and comment out the SMTP_* vars above.
+      # - key: DISABLE_EMAILS
+      #   value: "true"
+
+      # ── Rate Limiting (optional overrides) ───────────────
+      - key: AUTH_RATE_LIMIT_WINDOW_MIN
+        value: "15"
+      - key: AUTH_RATE_LIMIT_MAX
+        value: "20"
+      - key: TRANSFER_RATE_LIMIT_WINDOW_MIN
+        value: "15"
+      - key: TRANSFER_RATE_LIMIT_MAX
+        value: "30"

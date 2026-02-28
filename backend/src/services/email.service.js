@@ -2,20 +2,48 @@ const nodemailer = require('nodemailer');
 
 /**
  * DISABLE_EMAILS=true  →  log the email to console only; do NOT send.
- * Useful in development to avoid accidental sends.
+ * Recommended for new deployments until SMTP credentials are verified.
+ *
+ * EMAIL SETUP (choose one):
+ *   Option A — Gmail App Password (RECOMMENDED — no token expiry issues):
+ *     SMTP_HOST=smtp.gmail.com  SMTP_PORT=587
+ *     SMTP_USER=you@gmail.com   SMTP_PASS=<16-char app password>
+ *     EMAIL_FROM=you@gmail.com  ADMIN_EMAIL=admin@example.com
+ *
+ *   Option B — Legacy Gmail OAuth2 (tokens expire every 7 days in Testing mode):
+ *     EMAIL_USER=...  CLIENT_ID=...  CLIENT_SECRET=...  REFRESH_TOKEN=...
+ *
+ *   Option C — Disable entirely:
+ *     DISABLE_EMAILS=true
+ *
+ * WHY emails appear with 14-17hr delay:
+ *   OAuth2 refresh tokens granted by Google Testing-mode projects expire every
+ *   7 days. Once expired, nodemailer authentication fails silently and Gmail's
+ *   SMTP server queues the rejected messages for retry (default retry window:
+ *   up to 72 hours, first retry burst ~14-17 hrs). Switch to Option A to
+ *   eliminate this entirely.
  */
+
+/** Static DISABLE flag — set at startup, never changes at runtime */
 const DISABLE_EMAILS = process.env.DISABLE_EMAILS === "true";
 
 /**
- * Build the nodemailer transporter from SMTP env vars.
- * Falls back to the legacy OAuth2 config if SMTP_HOST is not set
- * (backward-compatible with the original Gmail OAuth2 setup).
+ * Runtime circuit breaker — set to true if startup verify fails.
+ * Prevents sending emails when we know credentials are invalid,
+ * which would otherwise queue messages on Gmail's SMTP for retries.
+ */
+let _credentialsVerified = false;
+let _verifyAttempted = false;
+
+/**
+ * Build the nodemailer transporter from SMTP env vars (preferred) or
+ * fall back to the legacy Gmail OAuth2 config.
  */
 const transporter = process.env.SMTP_HOST
   ? nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT ?? "587", 10),
-      secure: parseInt(process.env.SMTP_PORT ?? "587", 10) === 465, // true for port 465, false otherwise
+      secure: parseInt(process.env.SMTP_PORT ?? "587", 10) === 465,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -33,32 +61,54 @@ const transporter = process.env.SMTP_HOST
     });
 
 // Verify connection only when emails are enabled.
+// IMPORTANT: If verify fails we set _credentialsVerified=false so no emails
+// are attempted — this prevents Gmail from receiving partial auth requests
+// that it then queues and retries over 14-17 hours.
 if (!DISABLE_EMAILS) {
+  _verifyAttempted = true;
   transporter.verify((error) => {
     if (error) {
-      console.error('[Email] ❌ Error connecting to email server:', error.message || error);
+      _credentialsVerified = false;
+      console.error('[Email] ❌ Could not connect to email server. Emails are DISABLED for this session.');
+      console.error('[Email]    Error:', error.message);
       if (error.message?.includes('invalid_grant') || error.message?.includes('Token')) {
-        console.error('[Email] 💡 Your OAuth2 refresh token has likely EXPIRED.');
-        console.error('[Email]    Google tokens expire after 7 days if the Cloud project is in "Testing" mode.');
-        console.error('[Email]    FIX: Switch to Gmail App Password — add SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS to .env');
+        console.error('[Email] 💡 OAuth2 refresh token has expired (Google Testing-mode tokens expire every 7 days).');
+        console.error('[Email]    FIX: Switch to Gmail App Password:');
+        console.error('[Email]      SMTP_HOST=smtp.gmail.com  SMTP_PORT=587');
+        console.error('[Email]      SMTP_USER=you@gmail.com   SMTP_PASS=<16-char app password>');
         console.error('[Email]    See: https://support.google.com/accounts/answer/185833');
+      } else if (!process.env.SMTP_HOST && !process.env.EMAIL_USER) {
+        console.error('[Email] 💡 No email credentials configured. Set SMTP_HOST/SMTP_USER/SMTP_PASS or DISABLE_EMAILS=true.');
       }
     } else {
+      _credentialsVerified = true;
+      const sender = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER || '(not set)';
+      const admin  = process.env.ADMIN_EMAIL || '(not configured — set ADMIN_EMAIL to receive transaction alerts)';
       console.log('[Email] ✅ Email server is ready to send messages.');
-      console.log(`[Email]    Sender: ${process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER}`);
-      console.log(`[Email]    Admin:  ${process.env.ADMIN_EMAIL || '(not configured)'}`);
+      console.log(`[Email]    Sender: ${sender}`);
+      console.log(`[Email]    Admin:  ${admin}`);
     }
   });
+} else {
+  console.log('[Email] ℹ️  Emails disabled (DISABLE_EMAILS=true). Notification calls will be no-ops.');
 }
 
 /**
  * sendEmail(to, subject, text, html?)
  * Core utility used by all notification helpers.
- * Respects DISABLE_EMAILS — safe to call unconditionally.
+ * Respects DISABLE_EMAILS and credential circuit-breaker.
+ * Safe to call unconditionally — will never throw.
  */
 const sendEmail = async (to, subject, text, html) => {
   if (DISABLE_EMAILS) {
-    console.log(`[Email] DISABLED — would have sent to: ${to} | subject: ${subject}`);
+    console.log(`[Email] DISABLED — skipping send to: ${to} | subject: ${subject}`);
+    return;
+  }
+
+  // Circuit breaker: if verify already ran and failed, skip sending.
+  // This prevents queuing messages on Gmail's SMTP when credentials are bad.
+  if (_verifyAttempted && !_credentialsVerified) {
+    console.warn(`[Email] SKIPPED (credentials not verified) — to: ${to} | subject: ${subject}`);
     return;
   }
 
@@ -68,7 +118,7 @@ const sendEmail = async (to, subject, text, html) => {
       || process.env.EMAIL_USER;
 
     const info = await transporter.sendMail({
-      from: `"Backend Ledger" <${fromAddress}>`,
+      from: `"Bank Transaction System" <${fromAddress}>`,
       to,
       subject,
       text,
@@ -77,6 +127,11 @@ const sendEmail = async (to, subject, text, html) => {
     console.log('[Email] Message sent:', info.messageId);
   } catch (error) {
     console.error('[Email] Error sending email:', error.message);
+    // Mark credentials as unverified to stop future attempts this session
+    if (error.message?.includes('invalid_grant') || error.message?.includes('Authentication')) {
+      _credentialsVerified = false;
+      console.error('[Email] ❌ Auth failure — disabling email sends for this session.');
+    }
   }
 };
 
