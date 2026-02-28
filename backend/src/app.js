@@ -1,6 +1,7 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const path = require("path");
+const fs = require("fs");
 const { auditLogMiddleware } = require("./middleware/auditLog.middleware");
 
 const app = express();
@@ -46,10 +47,13 @@ app.use("/api/admin", adminRouter);
 // Express serves static assets and falls back to index.html for SPA routes.
 if (process.env.NODE_ENV === "production") {
   const clientDist = path.join(__dirname, "..", "..", "frontend", "dist");
-  app.use(express.static(clientDist));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(clientDist, "index.html"));
-  });
+  if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist));
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.join(clientDist, "index.html"));
+    });
+  }
 }
 
 // ── 404 handler for unmatched API routes ─────────────────────

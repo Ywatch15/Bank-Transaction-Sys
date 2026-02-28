@@ -23,3 +23,8 @@ frontend/.cache/
 .DS_Store
 Thumbs.db
 *.pem
+
+-
+# ── Personal study notes (not for git) ───────────
+STUDY_GUIDE.md
+study_docs/
